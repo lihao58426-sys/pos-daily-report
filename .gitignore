@@ -1,0 +1,24 @@
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 日志文件（含业务数据）
+*.log
+
+# Cookie 文件（含登录态，泄露可被他人登录）
+*.json
+
+# 抓取过程生成的 HTML 调试文件
+*_page.html
+business_overview.html
+
+# 报错截图
+*.png
+
+# 虚拟环境
+venv/
+.venv/
+
+# IDE 配置
+.vscode/
+.idea/

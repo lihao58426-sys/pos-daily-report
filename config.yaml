@@ -1,0 +1,29 @@
+# ==========================================
+# POS 日报推送 - 配置文件
+# ==========================================
+#
+# 🔐 敏感信息（账号、密码、Webhook）通过环境变量注入：
+#     POS_ACCOUNT       - 后台登录账号
+#     POS_PASSWORD      - 后台登录密码
+#     WEWORK_WEBHOOK_URL - 企业微信群机器人 Webhook 地址
+#
+#     Windows 设置方法：
+#       setx POS_ACCOUNT "你的账号"
+#       setx POS_PASSWORD "你的密码"
+#       setx WEWORK_WEBHOOK_URL "你的Webhook地址"
+# ==========================================
+
+# POS 后台配置（账号密码从环境变量读取，此处不存）
+pos:
+
+# 推送方式（目前支持: wework_bot）
+push:
+  method: "wework_bot"
+  # webhook_url 从环境变量 WEWORK_WEBHOOK_URL 读取
+
+# 运行模式
+run:
+  # headless: True 为无头模式（不弹浏览器），False 会弹出浏览器窗口方便调试
+  headless: false
+  # 超时时间（毫秒）
+  timeout: 30000
