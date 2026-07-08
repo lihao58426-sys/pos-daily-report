@@ -14,6 +14,7 @@ from playwright.sync_api import sync_playwright, Page
 
 logger = logging.getLogger(__name__)
 
+
 class YinbaoCrawler:
     """POS 后台数据抓取器"""
 
@@ -381,7 +382,7 @@ class YinbaoCrawler:
             # 例如：奶茶 120单、咖啡 95单
             pattern = re.compile(r'([^\d\n]+?)\s+(\d+)\s*单')
             matches = pattern.findall(text)
-            
+
             for name, count in matches:
                 name = name.strip()
                 # 过滤掉标题和其他非商品文本
@@ -392,7 +393,7 @@ class YinbaoCrawler:
                     })
         except Exception as e:
             logger.warning(f"解析商品排名失败: {e}")
-        
+
         return products
 
     def _extract_time_range(self, page: Page) -> str:
