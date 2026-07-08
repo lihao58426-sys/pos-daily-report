@@ -30,7 +30,6 @@ class DailyReport:
     替代原来 crawler.run() 返回的 dict。
     """
     revenue: float = 0.0           # 营业实收（元）
-    order_count: int = 0           # 订单总数
     time_range: str = ""           # 查询时间跨度
     card_recharge: float = 0.0     # 储值卡充值
     time_card_sales: float = 0.0   # 次卡销售
@@ -48,7 +47,6 @@ class DailyReport:
         """
         return cls(
             revenue=float(data.get("营业实收", 0) or 0),
-            order_count=int(float(data.get("订单总数", 0) or 0)),
             time_range=str(data.get("查询时间跨度", "")),
             card_recharge=float(data.get("储值卡充值", 0) or 0),
             time_card_sales=float(data.get("次卡销售", 0) or 0),
@@ -56,7 +54,6 @@ class DailyReport:
             member_upgrade=float(data.get("会员付费升级", 0) or 0),
             product_ranking=data.get("商品消费单数排名", []),
             raw_overview=str(data.get("_营业概况表_原始", "")),
-            raw_product_ranking=str(data.get("_商品消费单数排名_原始", "")),
         )
 
     @property
@@ -68,7 +65,7 @@ class DailyReport:
             ("礼品包销售", self.gift_pack_sales),
             ("会员付费升级", self.member_upgrade),
         ]
-        return [RevenueItem(name=n, amount=a) for n, a in items if a > 0]
+        return [RevenueItem(name=n, amount=a) for n, a in items]
 
 
 @dataclass

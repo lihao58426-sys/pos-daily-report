@@ -27,3 +27,7 @@ run:
   headless: false
   # 超时时间（毫秒）
   timeout: 30000
+  # 真人模拟：每次操作之间随机停顿（秒）
+  # 太快会被银豹检测为机器人，建议 1.0~3.0
+  min_delay: 1.0
+  max_delay: 3.0

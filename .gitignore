@@ -2,15 +2,17 @@
 __pycache__/
 *.pyc
 
+# 数据库文件（含真实业务数据，绝不提交）
+*.db
+
 # 日志文件（含业务数据）
 *.log
 
-# Cookie 文件（含登录态，泄露可被他人登录）
+# Cookie（含登录态）
 *.json
 
-# 抓取过程生成的 HTML 调试文件
+# 调试 HTML
 *_page.html
-business_overview.html
 
 # 报错截图
 *.png
@@ -19,6 +21,6 @@ business_overview.html
 venv/
 .venv/
 
-# IDE 配置
+# IDE
 .vscode/
 .idea/

@@ -5,6 +5,7 @@
 
 import json
 import os
+import random
 import re
 import time
 import logging
@@ -27,6 +28,20 @@ class YinbaoCrawler:
         self.headless = config["run"].get("headless", True)
         self.timeout = config["run"].get("timeout", 30000)
         self.cookie_path = "pospal_cookies.json"
+        # 真人模拟延迟范围
+        self.min_delay = config["run"].get("min_delay", 1.0)
+        self.max_delay = config["run"].get("max_delay", 3.0)
+
+    def _pause(self, label: str = "") -> None:
+        """模拟真人间歇——每次操作后随机停顿
+
+        人类不会秒点下一个按钮，会有 1-3 秒的自然停顿。
+        这个停顿让操作节奏像真人在浏览器里手动操作。
+        """
+        delay = random.uniform(self.min_delay, self.max_delay)
+        if label:
+            logger.debug(f"  [停顿 {delay:.1f}s] {label}")
+        time.sleep(delay)
 
     def run(self) -> Optional[dict]:
         """执行完整的数据抓取流程"""
@@ -53,14 +68,16 @@ class YinbaoCrawler:
                     return None
 
                 # ========== 关闭公告弹窗 ==========
+                self._pause("等弹窗加载")
                 self._close_announcement(page)
+                self._pause("关闭弹窗后")
 
                 # ========== 第二步：首页抓取营业实收 ==========
                 logger.info("\n--- 正在抓取首页数据 ---")
                 data = {}
 
-                # 提取营业实收和订单总数
-                labels = ["营业实收", "订单总数"]
+                # 提取营业实收
+                labels = ["营业实收"]
                 for label in labels:
                     val = self._extract_value_after_label(page, label)
                     if val:
@@ -71,6 +88,7 @@ class YinbaoCrawler:
                 logger.info("\n--- 正在抓取商品消费单数排名 ---")
 
                 # 先把鼠标移到视口中央，再用 evaluate 滚动（mouse.wheel 单独用常常不生效）
+                self._pause("看数据")
                 page.mouse.move(960, 540)
                 time.sleep(0.3)
 
@@ -88,25 +106,25 @@ class YinbaoCrawler:
                     try:
                         ranking_el.scroll_into_view_if_needed(timeout=5000)
                         time.sleep(2)
-                        # 优先取祖先卡片容器，取不到就往上两级
-                        parent = ranking_el.locator(
-                            "xpath=ancestor::div[contains(@class,'card') or contains(@class,'panel') "
-                            "or contains(@class,'box') or contains(@class,'rank')][1]"
-                        ).first
-                        text = parent.inner_text() if parent.count() > 0 else ""
-                        if not text:
-                            text = ranking_el.locator("xpath=../..").inner_text()
-                        if text:
-                            data["_商品消费单数排名_原始"] = text
-                            logger.info(f"  商品消费单数排名内容长度: {len(text)} 字符")
-                            products = self._parse_product_ranking(text)
-                            if products:
-                                data["商品消费单数排名"] = products
-                                logger.info(f"  提取到 {len(products)} 个商品")
-                                for i, p in enumerate(products[:5], 1):
-                                    logger.info(f"    {i}. {p['name']}: {p['count']}单")
-                            else:
-                                logger.warning("  未能解析出商品数据，原始文本已保存")
+                        # 优先用 Playwright 选择器直接从页面提取结构化数据
+                        products = self._parse_product_ranking_from_page(page)
+                        if products:
+                            data["商品消费单数排名"] = products
+                            logger.info(f"  提取到 {len(products)} 个商品")
+                            for i, p in enumerate(products[:5], 1):
+                                logger.info(f"    {i}. {p['name']}: {p['count']}单")
+                        else:
+                            # 降级：保存原始文本
+                            logger.warning("  未能解析出商品数据，保存原始文本")
+                            parent = ranking_el.locator(
+                                "xpath=ancestor::div[contains(@class,'card') or contains(@class,'panel') "
+                                "or contains(@class,'box') or contains(@class,'rank')][1]"
+                            ).first
+                            text = parent.inner_text() if parent.count() > 0 else ""
+                            if not text:
+                                text = ranking_el.locator("xpath=../..").inner_text()
+                            if text:
+                                data["_商品消费单数排名_原始"] = text
                     except Exception as e:
                         logger.warning(f"  滚动或提取失败: {e}")
                 else:
@@ -114,27 +132,19 @@ class YinbaoCrawler:
 
                 # ========== 第四步：向上滚动回到顶部 ==========
                 logger.info("\n--- 向上滚动回到顶部 ---")
+                self._pause("看完排名，回到顶部")
                 page.evaluate("window.scrollTo(0, 0)")
-                time.sleep(2)
+                self._pause("等页面回到顶部")
 
-                # ========== 第五步：点击"更多"进入营业概况明细 ==========
+                # ========== 第五步：进入营业概况明细 ==========
+                # "更多"在新标签页打开，URL 固定为 /Report/BusinessSummaryV2
+                # 直接导航即可——Cookie 已登录，不需要重新认证
                 logger.info("\n--- 正在进入营业概况明细 ---")
-                logger.info("  尝试点击'更多'...")
-                clicked_more = False
-                try:
-                    more_btn = page.get_by_text("更多").first
-                    if more_btn.count() > 0:
-                        more_btn.click()
-                        time.sleep(3)
-                        clicked_more = True
-                        logger.info("  已点击'更多'，进入营业概况明细页")
-                    else:
-                        logger.warning("  未找到'更多'按钮")
-                except Exception as e:
-                    logger.warning(f"  点击'更多'失败: {e}")
-
-                if not clicked_more:
-                    logger.warning("  未找到'更多'按钮，跳过营业概况明细页")
+                detail_url = "https://beta30.pospal.cn/Report/BusinessSummaryV2"
+                logger.info(f"  导航: {detail_url}")
+                page.goto(detail_url, wait_until="networkidle")
+                time.sleep(3)
+                logger.info(f"  当前页面: {page.url}")
 
                 # ========== 第六步：在营业概况明细页抓取数据 ==========
                 # 提取右上角时间跨度
@@ -151,23 +161,31 @@ class YinbaoCrawler:
                 except Exception:
                     pass
 
-                # 提取表格数据
-                table_text = self._extract_table_text(page)
-                if table_text:
-                    data["_营业概况表_原始"] = table_text
-                    logger.info(f"  表格内容长度: {len(table_text)} 字符")
-
-                    # 提取储值卡充值、次卡销售、会员付费升级的现金支付列
-                    target_items = [
-                        ("储值卡充值", "储值卡充值"),
-                        ("次卡销售", "次卡销售"),
-                        ("会员付费升级", "会员付费升级"),
-                    ]
-                    for label, key in target_items:
-                        val = self._extract_value_near_label(table_text, label)
-                        if val:
-                            data[key] = val
-                            logger.info(f"  {key}: {val}")
+                # 从营业概况表格中精确提取：储值卡充值 / 次卡销售 / 会员付费升级 的"现金支付"列
+                # HTML 结构：
+                #   <tr data-row-title="储值卡充值">
+                #     <td class="tdAlignRight"><span data-show-name="现金支付">1100.00</span></td>
+                target_rows = [
+                    # (定位方式, 数据key, 说明)
+                    ('tr[data-row-key="memberCard"]', "储值卡充值"),
+                    ('tr[data-row-key="passProduct"]', "次卡销售"),
+                    ('tr:has(a:has-text("会员付费升级"))', "会员付费升级"),  # 这行没有 data-row-key
+                ]
+                for selector, data_key in target_rows:
+                    try:
+                        row = page.locator(selector).first
+                        if row.count() > 0:
+                            cash_span = row.locator('span[data-show-name="现金支付"]').first
+                            if cash_span.count() > 0:
+                                val = cash_span.inner_text().strip()
+                                data[data_key] = val
+                                logger.info(f"  {data_key}: {val}")
+                            else:
+                                logger.warning(f"  未找到{data_key}的现金支付列")
+                        else:
+                            logger.warning(f"  未找到{data_key}行")
+                    except Exception as e:
+                        logger.warning(f"  提取{data_key}失败: {e}")
 
                 logger.info("\n" + "=" * 50)
                 logger.info("全部数据抓取完成！")
@@ -374,18 +392,73 @@ class YinbaoCrawler:
             return raw.replace(",", "")  # 统一去逗号，返回纯数字字符串
         return ""
 
-    def _parse_product_ranking(self, text: str) -> list:
-        """解析商品消费单数排名文本，提取商品名字和销售数量"""
+    def _parse_product_ranking_from_page(self, page: Page) -> list:
+        """从页面提取商品消费单数排名
+
+        限定在"商品消费单数排名"这个卡片内、且"销量"标签页激活时。
+        页面可能有多个 commodity__item（销售额排名、消费单数排名等），
+        必须用标题文字精确锁定，否则会抓到别的排名区。
+        """
         products = []
         try:
-            # 匹配模式：商品名 数量单
-            # 例如：奶茶 120单、咖啡 95单
+            # Step 1: 找到"商品消费单数排名"这个卡片
+            ranking_card = page.locator('.commodity__item:has-text("商品消费单数排名")').first
+            if ranking_card.count() == 0:
+                logger.warning("  未找到'商品消费单数排名'卡片")
+                return products
+
+            # Step 2: 确认"销量"标签是激活状态（不是"金额"标签）
+            active_tab = ranking_card.locator('span.tab.active').first
+            if active_tab.count() > 0:
+                tab_text = active_tab.inner_text().strip()
+                logger.info(f"  当前激活标签: {tab_text}")
+            else:
+                logger.warning("  未找到激活标签，可能默认就是销量")
+
+            # Step 3: 在这个卡片内找所有商品条目
+            bars = ranking_card.locator('.percentBar').all()
+            logger.info(f"  找到 {len(bars)} 个商品条目")
+
+            for bar in bars:
+                try:
+                    # 商品名 — .percentBar__top-left
+                    name_el = bar.locator('.percentBar__top-left').first
+                    if name_el.count() == 0:
+                        continue
+                    name = name_el.inner_text().strip()
+
+                    # 跳过表头和其他非商品文本
+                    if not name or '商品' in name:
+                        continue
+
+                    # 数量 — 第一个 .percentBar__tipItem 里是 "数量 84个"
+                    qty_el = bar.locator('.percentBar__tipItem').first
+                    if qty_el.count() == 0:
+                        continue
+                    qty_text = qty_el.inner_text()
+                    match = re.search(r'(\d+)', qty_text)
+                    qty = match.group(1) if match else "0"
+
+                    products.append({'name': name, 'count': qty})
+                except Exception:
+                    continue
+
+            logger.info(f"  成功提取 {len(products)} 个商品")
+        except Exception as e:
+            logger.warning(f"  从页面提取商品排名失败: {e}")
+
+        return products
+
+    def _parse_product_ranking(self, text: str) -> list:
+        """解析商品消费单数排名文本 — 旧版（正则方式，保留兼容）"""
+        products = []
+        try:
+            # 尝试旧格式：商品名 数量单（如 "奶茶 120单"）
             pattern = re.compile(r'([^\d\n]+?)\s+(\d+)\s*单')
             matches = pattern.findall(text)
 
             for name, count in matches:
                 name = name.strip()
-                # 过滤掉标题和其他非商品文本
                 if name and '商品消费单数排名' not in name and len(name) > 0:
                     products.append({
                         'name': name,
@@ -405,7 +478,7 @@ class YinbaoCrawler:
                 if re.search(r"\d{4}.\d{2}.\d{2}", text):
                     return text
 
-            page_text = page.inner_text()
+            page_text = page.inner_text("body")
             match = re.search(r"(\d{4}.\d{2}.\d{2}\s+\d{2}:\d{2}\s*[-–—]\s*\d{4}.\d{2}.\d{2}\s+\d{2}:\d{2})", page_text)
             if match:
                 return match.group(1).strip()
@@ -427,15 +500,14 @@ class YinbaoCrawler:
         except Exception:
             pass
 
-        # 提取营业实收和订单总数
-        labels = ["营业实收", "订单总数"]
+        # 提取营业实收
+        labels = ["营业实收"]
         for label in labels:
             val = self._extract_value_after_label(page, label)
             if val:
                 data[label] = val
 
         logger.info(f"  营业实收: {data.get('营业实收', 'N/A')}")
-        logger.info(f"  订单总数: {data.get('订单总数', 'N/A')}")
 
         # 点击"更多"进入营业概况明细页
         logger.info("  尝试点击'更多'进入营业概况明细...")

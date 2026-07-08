@@ -90,7 +90,6 @@ def build_markdown_report(report: DailyReport, date_str: str | None = None) -> s
 
     # ── 核心指标 ──
     lines.append(f"## 今日营业实收：**{report.revenue:.0f}** 元")
-    lines.append(f"订单总数：{report.order_count} 笔")
     lines.append("")
 
     # ── 关键收入明细（只显示金额 > 0 的项目）──
@@ -104,19 +103,17 @@ def build_markdown_report(report: DailyReport, date_str: str | None = None) -> s
             lines.append(f"| {item.name} | {item.amount:.0f} 元 |")
         lines.append("")
 
-    # ── 各项目销量（如果有原始表格数据）──
-    if report.raw_product_ranking:
-        products = _parse_product_table(report.raw_product_ranking)
-        if products:
-            lines.append("## 各项目销量")
-            lines.append("")
-            lines.append("| 项目 | 销量 |")
-            lines.append("| --- | ---: |")
-            for prod in products:
-                name = prod.get("name", "")
-                qty = prod.get("qty", "0")
-                lines.append(f"| {name} | {qty} |")
-            lines.append("")
+    # ── 商品消费排名 ──
+    if report.product_ranking:
+        lines.append("## 商品消费单数排名")
+        lines.append("")
+        lines.append("| 排名 | 商品 | 销量 |")
+        lines.append("| ---: | --- | ---: |")
+        for i, prod in enumerate(report.product_ranking, 1):
+            name = prod.get("name", "")
+            count = prod.get("count", "0")
+            lines.append(f"| {i} | {name} | {count} 单 |")
+        lines.append("")
 
     # ── 尾部 ──
     lines.append("---")
