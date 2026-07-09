@@ -8,37 +8,37 @@
 
 ### ✅ 已实现
 
-- Playwright 自动登录银豹后台（支持 Cookie 持久化）
-- 首页抓取：**营业实收**、**订单总数**
+- **营业实收** — 首页自动抓取
+- **商品消费单数排名** — Top 5 商品 + 销量
+- **关键收入明细** — 储值卡充值 / 次卡销售 / 会员付费升级（现金支付列）
+- SQLite 数据库 — 日报表 + 商品排名表，支持历史/趋势/环比查询
+- 多门店支持 — config.yaml 配置门店列表，自动循环抓取
+- 反检测 — 浏览器指纹隐藏 + UA 伪装 + 真人鼠标轨迹 + 随机延迟
+- 定时任务 — 自调度算法：每天 23:10~23:50 随机执行，41 天内不重复（待上云激活）
+- 演习模式 — `--dry-run` 只打印不推送
 - 企业微信群机器人 Markdown 日报推送
-- 登录失败自动重试
-
-### 🚧 开发中（暂不可用）
-
-- **商品消费单数排名**：页面需滚动加载，滚动触发不稳定，暂时无法可靠提取
-- **储值卡充值 / 次卡销售金额**：需从"更多→营业概况明细"的表格中定位，当前提取逻辑不稳定
 
 ### 📋 计划中
 
-- 多门店支持
-- APScheduler 定时自动运行
-- SQLite 数据库持久化（历史趋势查询）
-- 环比昨日数据对比
 - Docker 打包
+- 云服务器部署
+- pytest 测试
 
 ## 技术栈
 
-Python · Playwright · 企业微信 Webhook · YAML
+Python · Playwright · SQLite · 企业微信 Webhook · YAML · APScheduler
 
 ## 环境要求
 
-- Python >= 3.10
+- Python >= 3.14
 - 环境变量：
 
 | 变量名 | 说明 |
 |--------|------|
-| `POS_ACCOUNT` | 银豹后台登录账号 |
-| `POS_PASSWORD` | 银豹后台登录密码 |
+| `POS_ACCOUNT` | 银豹后台登录账号（总店） |
+| `POS_PASSWORD` | 银豹后台登录密码（总店） |
+| `POS_ACCOUNT_2` | 分店账号（多店时设置） |
+| `POS_PASSWORD_2` | 分店密码（多店时设置） |
 | `WEWORK_WEBHOOK_URL` | 企业微信群机器人 Webhook 地址 |
 
 ## 安装
@@ -53,27 +53,22 @@ playwright install chromium
 ## 使用
 
 ```bash
-python daily_report.py
+python main.py              # 正常推送
+python main.py --dry-run    # 演习模式（只打印不推）
 ```
 
 ## 项目结构
 
 ```
 pos_daily_report/
-├── config.yaml          # 配置文件
-├── daily_report.py      # 主入口
-├── yinbao_crawler.py    # 银豹页面抓取模块
-├── wechat_push.py       # 企业微信推送模块
-├── pyproject.toml       # 项目元数据
-└── requirements.txt     # 依赖清单
-```
-
-## 更新
-
-代码修改后提交推送：
-
-```bash
-git add .
-git commit -m "描述你改了什么"
-git push
+├── config.py          # 配置加载
+├── crawler.py         # 银豹页面抓取（Playwright）
+├── models.py          # 数据模型（DailyReport等）
+├── database.py        # SQLite 数据库操作
+├── report.py          # 日报内容构建
+├── pusher.py          # 企业微信推送
+├── exceptions.py      # 自定义异常
+├── main.py            # 主入口
+├── config.yaml        # 配置文件
+└── pyproject.toml     # 项目元数据
 ```
