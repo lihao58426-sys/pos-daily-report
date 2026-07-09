@@ -50,6 +50,7 @@ class ReportDatabase:
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS daily_reports (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                store_id        TEXT    NOT NULL DEFAULT 'default',
                 date            TEXT    NOT NULL,
                 revenue         REAL    NOT NULL DEFAULT 0,
                 time_range      TEXT    DEFAULT '',
@@ -66,6 +67,7 @@ class ReportDatabase:
             CREATE TABLE IF NOT EXISTS product_rankings (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 report_id       INTEGER NOT NULL,
+                store_id        TEXT    NOT NULL DEFAULT 'default',
                 date            TEXT    NOT NULL,
                 rank            INTEGER NOT NULL,
                 product_name    TEXT    NOT NULL,
@@ -77,12 +79,13 @@ class ReportDatabase:
         logger.info(f"数据库就绪: {self.conn}")
 
     # ==================== 写入 ====================
-    def insert(self, report: DailyReport, date: str | None = None) -> int:
+    def insert(self, report: DailyReport, date: str | None = None, store_id: str = "default") -> int:
         """把一条日报写入数据库
 
         Args:
             report: DailyReport 对象（来自 models.py）
             date: 日期字符串，默认今天
+            store_id: 门店标识（如 "xianyang"）
 
         Returns:
             新插入行的 id
@@ -91,12 +94,13 @@ class ReportDatabase:
         cursor = self.conn.execute(
             """
             INSERT INTO daily_reports
-                (date, revenue, time_range,
+                (store_id, date, revenue, time_range,
                  card_recharge, time_card_sales, gift_pack_sales, member_upgrade,
                  raw_overview)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                store_id,
                 date,
                 report.revenue,
                 report.time_range,
@@ -112,25 +116,28 @@ class ReportDatabase:
         return cursor.lastrowid
 
     # ==================== 查询：历史 ====================
-    def get_history(self, days: int = 30) -> list[dict]:
+    def get_history(self, days: int = 30, store_id: str | None = None) -> list[dict]:
         """查最近 N 天的日报记录
 
         Args:
             days: 查多少天，默认 30
+            store_id: 门店ID，None=查所有店
 
         Returns:
             按日期倒序的日报列表
         """
-        cursor = self.conn.execute(
-            """
-            SELECT date, revenue, card_recharge,
-                   time_card_sales, member_upgrade
-            FROM daily_reports
-            WHERE date >= ?
-            ORDER BY date DESC
-            """,
-            ((datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d"),),
-        )
+        if store_id:
+            cursor = self.conn.execute(
+                "SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
+                "FROM daily_reports WHERE store_id = ? AND date >= ? ORDER BY date DESC",
+                (store_id, (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")),
+            )
+        else:
+            cursor = self.conn.execute(
+                "SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
+                "FROM daily_reports WHERE date >= ? ORDER BY date DESC",
+                ((datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d"),),
+            )
         return [dict(row) for row in cursor.fetchall()]
 
     # ==================== 查询：趋势 ====================
@@ -237,19 +244,13 @@ class ReportDatabase:
         }
 
     # ==================== 商品排名 ====================
-    def insert_product_rankings(self, report_id: int, date: str, products: list[dict]) -> None:
-        """保存商品排名数据
-
-        Args:
-            report_id: 关联的日报 id
-            date: 日期
-            products: [{"name": "蹦床组合乐园", "count": "90"}, ...]
-        """
+    def insert_product_rankings(self, report_id: int, date: str, products: list[dict], store_id: str = "default") -> None:
+        """保存商品排名数据"""
         for rank, prod in enumerate(products, 1):
             self.conn.execute(
-                "INSERT INTO product_rankings (report_id, date, rank, product_name, quantity) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (report_id, date, rank, prod.get("name", ""), int(prod.get("count", 0))),
+                "INSERT INTO product_rankings (report_id, store_id, date, rank, product_name, quantity) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (report_id, store_id, date, rank, prod.get("name", ""), int(prod.get("count", 0))),
             )
         self.conn.commit()
         logger.info(f"商品排名已入库: {len(products)} 条")

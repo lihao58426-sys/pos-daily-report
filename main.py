@@ -52,9 +52,8 @@ def _print_separator(title: str = "") -> None:
 
 
 def main() -> None:
-    """日报推送主流程"""
+    """日报推送主流程 — 支持多店"""
 
-    # ── 解析命令行参数 ──
     dry_run = "--dry-run" in sys.argv
 
     if dry_run:
@@ -68,75 +67,74 @@ def main() -> None:
 
     # ── 步骤 1：加载配置 ── config.py ──
     config = load_config()
+    stores = config.get("stores", [{"id": "default", "name": "", "account_env": "POS_ACCOUNT", "password_env": "POS_PASSWORD"}])
 
-    # ── 步骤 2：抓取数据 ── crawler.py ──
-    crawler = YinbaoCrawler(config)
-    data = crawler.run()
+    # ── 步骤 2：逐店抓取 → 存库 ──
+    all_reports = []
+    for store in stores:
+        store_id = store["id"]
+        store_name = store["name"]
+        logger.info(f"\n{'─' * 40}")
+        logger.info(f"正在处理: {store_name} ({store_id})")
+        logger.info(f"{'─' * 40}")
 
-    if not data:
-        logger.error("数据抓取失败，终止推送")
+        crawler = YinbaoCrawler(config, store=store)
+        data = crawler.run()
+
+        if not data:
+            logger.warning(f"[{store_name}] 数据抓取失败，跳过")
+            continue
+
+        report = DailyReport.from_crawler_dict(data)
+        logger.info(f"[{store_name}] revenue={report.revenue:.0f}")
+
+        with ReportDatabase("daily_report.db") as db:
+            row_id = db.insert(report, store_id=store_id)
+            if report.product_ranking:
+                db.insert_product_rankings(row_id, datetime.now().strftime("%Y-%m-%d"), report.product_ranking, store_id=store_id)
+            summary = db.get_summary()
+            if summary["total_days"] > 1:
+                logger.info(f"[{store_name}] 历史: {summary['total_days']}天 / 累计¥{summary['total_revenue']:,.0f} / 日均¥{summary['avg_daily']:,.0f}")
+
+        all_reports.append((store_name, report))
+
+    if not all_reports:
+        logger.error("所有门店数据抓取均失败，终止推送")
         sys.exit(1)
 
-    logger.info(f"抓取到数据指标数: {len(data)} 项")
-    for key in ["营业实收", "查询时间跨度", "储值卡充值", "次卡销售"]:
-        logger.info(f"  {key}: {data.get(key, 'N/A')}")
-
-    # ── 步骤 3：dict → dataclass ── models.py ──
-    report = DailyReport.from_crawler_dict(data)
-    logger.info(f"日报数据转换完成: revenue={report.revenue:.0f}")
-
-    # ── 步骤 4：存入数据库 ── database.py ──
-    with ReportDatabase("daily_report.db") as db:
-        row_id = db.insert(report)
-        logger.info(f"数据已入库: row_id={row_id}")
-
-        # 商品排名单独存（一次日报多条排名）
-        if report.product_ranking:
-            db.insert_product_rankings(row_id, datetime.now().strftime("%Y-%m-%d"), report.product_ranking)
-            logger.info(f"商品排名已入库: {len(report.product_ranking)} 条")
-
-        # 顺便查一下历史（帮你直观感受数据库的价值）
-        summary = db.get_summary()
-        if summary["total_days"] > 1:
-            logger.info(
-                f"历史统计: 共 {summary['total_days']} 天, "
-                f"累计营收 ¥{summary['total_revenue']:,.0f}, "
-                f"日均 ¥{summary['avg_daily']:,.0f}"
-            )
-
-    # ── 步骤 5：构建日报内容 ── report.py ──
-    md_content = build_markdown_report(report)
+    # ── 步骤 3：构建日报 ──
+    if len(all_reports) == 1:
+        _, report = all_reports[0]
+        md_content = build_markdown_report(report)
+    else:
+        parts = []
+        for store_name, report in all_reports:
+            parts.append(f"## {store_name}")
+            parts.append(build_markdown_report(report))
+            parts.append("")
+        md_content = "\n".join(parts)
     logger.info("日报内容构建完成")
 
-    # ── 步骤 6：推送 ──
+    # ── 步骤 4：推送 ──
     push_method = config["push"]["method"]
-    logger.info(f"推送方式: {push_method}")
 
     if dry_run:
-        # ==================== 演习模式 ====================
-        # 同样走完爬数据 + 拼报告，但不调 pusher，直接 print
-        _print_separator("日报内容预览（以下为将要推送的内容）")
+        _print_separator("日报内容预览")
         print(md_content)
         _print_separator("DRY RUN 完成 — 以上内容未实际推送")
-        # =================================================
 
     elif push_method == "wework_bot":
-        # ==================== 正常推送 ====================
         webhook = get_webhook_url()
         if not webhook:
             logger.error("未设置环境变量 WEWORK_WEBHOOK_URL")
             sys.exit(1)
-
         bot = WeWorkBotPush(webhook)
         logger.info("正在推送到企业微信群...")
-        success = bot.send_markdown(md_content)
-
-        if success:
+        if bot.send_markdown(md_content):
             logger.info("日报推送成功！")
         else:
             logger.error("日报推送失败")
             sys.exit(1)
-        # =================================================
 
     else:
         logger.error(f"不支持的推送方式: {push_method}")
@@ -149,3 +147,70 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# ============================================================
+# 定时任务模式（上云后再激活）
+# ============================================================
+# 用法：python main.py --scheduler
+# 效果：程序不退出，每天 23:10~23:50 之间随机时间跑一次
+#       41 个分钟数用完一遍之前绝不重复，用完洗牌再开下一轮
+#
+# 原理：自调度 — 每次跑完算下次几点跑，sleep 到点再跑
+#
+# 激活步骤（阶段三上云后）：
+#   取消下面整段注释，云服务器上 python main.py --scheduler &
+#
+# 注意：电脑不能关机。上云之前不要激活。
+# ============================================================
+# if "--scheduler" in sys.argv:
+#     import random as _random
+#     from datetime import datetime as _dt, timedelta as _td
+#
+#     _pool: list[int] = []            # 当前轮次剩余可用的分钟数
+#     _used_seconds: dict[int, list[int]] = {}  # 每个分钟用过的秒数
+#
+#     def _refill_pool() -> None:
+#         """重新填满可选池（41 个分钟数全部洗牌），
+#         并保证新一轮的第一个和上一轮的最后一个不重复。"""
+#         nonlocal _pool
+#         last = _pool[0] if len(_pool) == 1 else None
+#         full = list(range(10, 51))
+#         _random.shuffle(full)
+#         if last is not None and full[0] == last:
+#             _random.shuffle(full)
+#         _pool = full
+#
+#     def _next_run_time() -> _dt:
+#         """每次从剩余池随机取一个分钟 + 随机秒。
+#         同一分钟再次出现时（跨轮），确保秒跟上次不同。
+#         银豹日志：23:17:43, 23:41:08, 23:25:31... 永远不重复。"""
+#         nonlocal _pool
+#         if not _pool:
+#             _refill_pool()
+#         minute = _pool.pop()
+#         # 选秒：避开这个分钟之前用过的秒数
+#         used = _used_seconds.get(minute, [])
+#         available = [s for s in range(60) if s not in used]
+#         second = _random.choice(available)
+#         _used_seconds.setdefault(minute, []).append(second)
+#
+#         now = _dt.now()
+#         target = now.replace(hour=23, minute=minute, second=second, microsecond=0)
+#         if target <= now:
+#             target += _td(days=1)
+#         return target
+#
+#     logger.info("定时任务已启动：每天 23:10~23:50 随机，41天内绝不重复")
+#     while True:
+#         target = _next_run_time()
+#         wait = (target - _dt.now()).total_seconds()
+#         logger.info(
+#             f"下次执行: {target.strftime('%m-%d %H:%M')} "
+#             f"（{wait/60:.0f} 分钟后）[剩余 {len(_pool)} 个可选]"
+#         )
+#         time.sleep(wait)
+#         try:
+#             main()
+#         except Exception as _e:
+#             logger.error(f"定时执行异常: {_e}")

@@ -21,13 +21,18 @@ class YinbaoCrawler:
 
     LOGIN_URL = "https://beta.pospal.cn/account/signin"
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, store: dict | None = None):
         self.config = config
-        self.account = os.getenv("POS_ACCOUNT", "")
-        self.password = os.getenv("POS_PASSWORD", "")
+        # 门店信息：多店时通过 store dict 指定账号环境变量名
+        store = store or {}
+        account_env = store.get("account_env", "POS_ACCOUNT")
+        password_env = store.get("password_env", "POS_PASSWORD")
+        self.store_id = store.get("id", "default")
+        self.account = os.getenv(account_env, "")
+        self.password = os.getenv(password_env, "")
         self.headless = config["run"].get("headless", True)
         self.timeout = config["run"].get("timeout", 30000)
-        self.cookie_path = "pospal_cookies.json"
+        self.cookie_path = f"pospal_cookies_{self.store_id}.json"  # 每店独立Cookie
         # 真人模拟延迟范围
         self.min_delay = config["run"].get("min_delay", 1.0)
         self.max_delay = config["run"].get("max_delay", 3.0)
@@ -43,6 +48,18 @@ class YinbaoCrawler:
             logger.debug(f"  [停顿 {delay:.1f}s] {label}")
         time.sleep(delay)
 
+    def _human_move(self, page: Page, x: int, y: int) -> None:
+        """模拟真人鼠标移动——分多步、微抖动，不是瞬移
+
+        真人鼠标轨迹是一条带微抖的弧线，Playwright 默认 mouse.move
+        是瞬间直达，银豹如果记录轨迹一秒识破。
+        """
+        steps = random.randint(10, 25)  # 分 10-25 步走完
+        # 加一点随机偏移，模拟手腕微抖
+        jitter_x = random.randint(-5, 5)
+        jitter_y = random.randint(-5, 5)
+        page.mouse.move(x + jitter_x, y + jitter_y, steps=steps)
+
     def run(self) -> Optional[dict]:
         """执行完整的数据抓取流程"""
         logger.info("=" * 50)
@@ -51,12 +68,22 @@ class YinbaoCrawler:
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=self.headless,
-                args=["--no-sandbox", "--disable-setuid-sandbox"],
+                args=[
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-blink-features=AutomationControlled",  # 隐藏 webdriver 标记
+                ],
             )
             context = browser.new_context(
                 viewport={"width": 1920, "height": 1080},
                 locale="zh-CN",
                 timezone_id="Asia/Shanghai",
+                # 伪装成普通 Chrome（默认的 HeadlessChrome UA 会暴露）
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/131.0.0.0 Safari/537.36"
+                ),
             )
             page = context.new_page()
             page.set_default_timeout(self.timeout)
@@ -89,7 +116,7 @@ class YinbaoCrawler:
 
                 # 先把鼠标移到视口中央，再用 evaluate 滚动（mouse.wheel 单独用常常不生效）
                 self._pause("看数据")
-                page.mouse.move(960, 540)
+                self._human_move(page, 960, 540)
                 time.sleep(0.3)
 
                 ranking_el = page.locator('text=商品消费单数排名').first
