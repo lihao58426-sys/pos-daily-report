@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 
+# pytest 缓存（自动生成，不用管）
+.pytest_cache/
+
 # 数据库文件（含真实业务数据，绝不提交）
 *.db
 
