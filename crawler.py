@@ -513,8 +513,9 @@ class YinbaoCrawler:
             logger.warning(f"  提取时间跨度失败: {e}")
         return ""
 
+    # ⚠️ 已废弃 — 逻辑已迁移到 run() 主流程中。保留作为历史参考，新代码不调用此方法。
     def _scrape_overview(self, page: Page) -> dict:
-        """抓取概览页核心数据，点击更多进入明细页提取关键收入和时间跨度"""
+        """[已废弃] 抓取概览页核心数据"""
         data = {}
         page.goto("https://user.pospal.cn/", wait_until="networkidle")
         time.sleep(3)
@@ -594,8 +595,9 @@ class YinbaoCrawler:
 
         return data
 
+    # ⚠️ 已废弃 — 逻辑已迁移到 run() 主流程中。保留作为历史参考，新代码不调用此方法。
     def _scrape_product_sales(self, page: Page) -> dict:
-        """在首页往下滚动，抓取商品消费单数排名"""
+        """[已废弃] 在首页往下滚动，抓取商品消费单数排名"""
         data = {}
 
         page.goto("https://user.pospal.cn/", wait_until="networkidle")
