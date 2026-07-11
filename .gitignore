@@ -13,6 +13,10 @@ __pycache__/
 
 # 调试 HTML
 *_page.html
+*_overview.html
+
+# 临时调试输出
+crawl_output.txt
 
 # 报错截图
 *.png
