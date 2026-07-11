@@ -328,6 +328,7 @@ class YinbaoCrawler:
                 '.close-btn',
                 '[class*="close"]',
                 'button[aria-label="Close"]',
+                'div.popupClose',            # 银豹团购迁移弹窗
             ]
             for selector in close_selectors:
                 btn = page.locator(selector).first
