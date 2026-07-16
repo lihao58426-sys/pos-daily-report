@@ -20,6 +20,8 @@
 
 import logging
 import sys
+import time
+import random
 from datetime import datetime
 
 from config import load_config, get_webhook_url
@@ -150,67 +152,58 @@ if __name__ == "__main__":
 
 
 # ============================================================
-# 定时任务模式（上云后再激活）
+# 定时任务模式（上云后运行：python main.py --scheduler &）
 # ============================================================
-# 用法：python main.py --scheduler
 # 效果：程序不退出，每天 23:10~23:50 之间随机时间跑一次
 #       41 个分钟数用完一遍之前绝不重复，用完洗牌再开下一轮
-#
 # 原理：自调度 — 每次跑完算下次几点跑，sleep 到点再跑
-#
-# 激活步骤（阶段三上云后）：
-#   取消下面整段注释，云服务器上 python main.py --scheduler &
-#
-# 注意：电脑不能关机。上云之前不要激活。
 # ============================================================
-# if "--scheduler" in sys.argv:
-#     import random as _random
-#     from datetime import datetime as _dt, timedelta as _td
-#
-#     _pool: list[int] = []            # 当前轮次剩余可用的分钟数
-#     _used_seconds: dict[int, list[int]] = {}  # 每个分钟用过的秒数
-#
-#     def _refill_pool() -> None:
-#         """重新填满可选池（41 个分钟数全部洗牌），
-#         并保证新一轮的第一个和上一轮的最后一个不重复。"""
-#         nonlocal _pool
-#         last = _pool[0] if len(_pool) == 1 else None
-#         full = list(range(10, 51))
-#         _random.shuffle(full)
-#         if last is not None and full[0] == last:
-#             _random.shuffle(full)
-#         _pool = full
-#
-#     def _next_run_time() -> _dt:
-#         """每次从剩余池随机取一个分钟 + 随机秒。
-#         同一分钟再次出现时（跨轮），确保秒跟上次不同。
-#         银豹日志：23:17:43, 23:41:08, 23:25:31... 永远不重复。"""
-#         nonlocal _pool
-#         if not _pool:
-#             _refill_pool()
-#         minute = _pool.pop()
-#         # 选秒：避开这个分钟之前用过的秒数
-#         used = _used_seconds.get(minute, [])
-#         available = [s for s in range(60) if s not in used]
-#         second = _random.choice(available)
-#         _used_seconds.setdefault(minute, []).append(second)
-#
-#         now = _dt.now()
-#         target = now.replace(hour=23, minute=minute, second=second, microsecond=0)
-#         if target <= now:
-#             target += _td(days=1)
-#         return target
-#
-#     logger.info("定时任务已启动：每天 23:10~23:50 随机，41天内绝不重复")
-#     while True:
-#         target = _next_run_time()
-#         wait = (target - _dt.now()).total_seconds()
-#         logger.info(
-#             f"下次执行: {target.strftime('%m-%d %H:%M')} "
-#             f"（{wait/60:.0f} 分钟后）[剩余 {len(_pool)} 个可选]"
-#         )
-#         time.sleep(wait)
-#         try:
-#             main()
-#         except Exception as _e:
-#             logger.error(f"定时执行异常: {_e}")
+if "--scheduler" in sys.argv:
+    from datetime import timedelta as _td
+
+    _pool: list[int] = []            # 当前轮次剩余可用的分钟数
+    _used_seconds: dict[int, list[int]] = {}  # 每个分钟用过的秒数
+
+    def _refill_pool() -> None:
+        """重新填满可选池（41 个分钟数全部洗牌），
+        并保证新一轮的第一个和上一轮的最后一个不重复。"""
+        global _pool
+        last = _pool[0] if len(_pool) == 1 else None
+        full = list(range(10, 51))
+        random.shuffle(full)
+        if last is not None and full[0] == last:
+            random.shuffle(full)
+        _pool = full
+
+    def _next_run_time() -> datetime:
+        """每次从剩余池随机取一个分钟 + 随机秒。
+        同一分钟再次出现时（跨轮），确保秒跟上次不同。
+        银豹日志：23:17:43, 23:41:08, 23:25:31... 永远不重复。"""
+        if not _pool:
+            _refill_pool()
+        minute = _pool.pop()
+        # 选秒：避开这个分钟之前用过的秒数
+        used = _used_seconds.get(minute, [])
+        available = [s for s in range(60) if s not in used]
+        second = random.choice(available)
+        _used_seconds.setdefault(minute, []).append(second)
+
+        now = datetime.now()
+        target = now.replace(hour=23, minute=minute, second=second, microsecond=0)
+        if target <= now:
+            target += _td(days=1)
+        return target
+
+    logger.info("定时任务已启动：每天 23:10~23:50 随机，41天内绝不重复")
+    while True:
+        target = _next_run_time()
+        wait = (target - datetime.now()).total_seconds()
+        logger.info(
+            f"下次执行: {target.strftime('%m-%d %H:%M')} "
+            f"（{wait/60:.0f} 分钟后）[剩余 {len(_pool)} 个可选]"
+        )
+        time.sleep(wait)
+        try:
+            main()
+        except Exception as _e:
+            logger.error(f"定时执行异常: {_e}")
