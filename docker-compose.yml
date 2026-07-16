@@ -1,0 +1,19 @@
+# ── POS 日报推送 — 服务编排 ──
+# POS 是定时任务而非 Web 服务，不暴露端口，只跑调度器。
+# 用法：
+#   docker compose up -d          # 后台启动，每天 23:10~23:50 自动推日报
+#   docker compose logs -f        # 看调度日志
+
+services:
+  pos-daily-report:
+    build: .
+    image: pos-report:latest
+    container_name: pos-daily-report
+    restart: unless-stopped
+    command: ["python", "main.py", "--scheduler"]    # 上云后自动跑定时调度
+    environment:
+      - POS_ACCOUNT=${POS_ACCOUNT}
+      - POS_PASSWORD=${POS_PASSWORD}
+      - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL}
+    volumes:
+      - ./daily_report.db:/app/daily_report.db        # SQLite 数据持久化
