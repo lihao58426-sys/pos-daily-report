@@ -29,7 +29,7 @@ push:
 
 # ── 运行模式 ──
 run:
-  headless: false
+  headless: true    # 云服务器无显示器，必须无头模式。本地调试时可临时改回 false 看浏览器操作
   timeout: 30000
   min_delay: 1.0      # 每次操作间随机停顿（秒）
   max_delay: 3.0
