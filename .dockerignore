@@ -1,0 +1,18 @@
+# ── Python 编译产物 ──
+__pycache__/
+*.pyc
+
+# ── 版本控制 ──
+.git/
+.gitignore
+
+# ── 运行时数据（通过 volume 挂载，不进镜像）──
+daily_report.db
+*.log
+
+# ── 测试 ──
+tests/
+.pytest_cache/
+
+# ── 开发工具 ──
+.vscode/
