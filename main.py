@@ -90,7 +90,7 @@ def main() -> None:
         report = DailyReport.from_crawler_dict(data)
         logger.info(f"[{store_name}] revenue={report.revenue:.0f}")
 
-        with ReportDatabase("daily_report.db") as db:
+        with ReportDatabase("data/daily_report.db") as db:
             row_id = db.insert(report, store_id=store_id)
             if report.product_ranking:
                 db.insert_product_rankings(row_id, datetime.now().strftime("%Y-%m-%d"), report.product_ranking, store_id=store_id)

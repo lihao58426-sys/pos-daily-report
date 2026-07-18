@@ -16,4 +16,4 @@ services:
       - POS_PASSWORD=${POS_PASSWORD}
       - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL}
     volumes:
-      - ./daily_report.db:/app/daily_report.db        # SQLite 数据持久化
+      - ./data:/app/data                              # SQLite 数据持久化（目录挂载，支持 journal 文件）
