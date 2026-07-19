@@ -10,6 +10,8 @@ import xml.etree.ElementTree as ET
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 
+from agent import run_agent
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,12 @@ async def receive_message(request: Request):
         from_user = root.findtext("FromUserName", "")
         logger.info(f"消息类型: {msg_type} | 来自: {from_user} | 内容: {content}")
 
-        # 暂时返回空字符串——企微要求 200 响应否则会重试
+        if msg_type == "text" and content:
+            logger.info("Agent 思考中...")
+            answer = run_agent(content)
+            logger.info(f"Agent 回复: {answer[:200]}")
+
+        # 先不回——C4 加企微发送功能
         return PlainTextResponse("")
 
     except ET.ParseError as e:
