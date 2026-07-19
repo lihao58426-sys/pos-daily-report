@@ -13,7 +13,7 @@ Agent 循环逻辑见 agent.py（下一个 commit）。
 
 from database import ReportDatabase
 
-DB_PATH = "daily_report.db"
+DB_PATH = "data/daily_report.db"
 
 
 # ── 工具执行函数 ──
