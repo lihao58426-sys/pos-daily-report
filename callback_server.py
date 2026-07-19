@@ -78,7 +78,11 @@ async def verify_callback(request: Request):
 async def receive_message(request: Request):
     """接收企微推送的消息——解析 XML，提取内容和发送人"""
     body = await request.body()
-    xml_text = body.decode("utf-8")
+    # 企微 XML 可能是 UTF-8 或 GBK，优先 UTF-8，失败回退 GBK
+    try:
+        xml_text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        xml_text = body.decode("gbk")
     logger.info(f"收到企微消息: {xml_text[:200]}")
 
     try:
