@@ -5,6 +5,7 @@
 """
 import logging
 import os
+import xml.etree.ElementTree as ET
 
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
@@ -22,12 +23,33 @@ APPSECRET = os.getenv("WEWORK_APPSECRET", "")
 
 @app.get("/callback", response_class=PlainTextResponse)
 async def verify_callback(request: Request):
-    """企微首次配置回调时验证——直接用 echoStr
-    返回 echo 给企微，企微认为服务器在。"""
+    """企微首次配置回调时验证——原样返回 echostr"""
     params = request.query_params
     echo = params.get("echostr", "ok")
     logger.info(f"回调验证请求: {echo[:20]}...")
     return PlainTextResponse(echo)
+
+
+@app.post("/callback")
+async def receive_message(request: Request):
+    """接收企微推送的消息——解析 XML，提取内容和发送人"""
+    body = await request.body()
+    xml_text = body.decode("utf-8")
+    logger.info(f"收到企微消息: {xml_text[:200]}")
+
+    try:
+        root = ET.fromstring(xml_text)
+        msg_type = root.findtext("MsgType", "unknown")
+        content = root.findtext("Content", "")
+        from_user = root.findtext("FromUserName", "")
+        logger.info(f"消息类型: {msg_type} | 来自: {from_user} | 内容: {content}")
+
+        # 暂时返回空字符串——企微要求 200 响应否则会重试
+        return PlainTextResponse("")
+
+    except ET.ParseError as e:
+        logger.error(f"XML 解析失败: {e}")
+        return PlainTextResponse("")
 
 
 if __name__ == "__main__":
