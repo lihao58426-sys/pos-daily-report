@@ -12,6 +12,7 @@ services:
     restart: unless-stopped
     command: ["python", "main.py", "--scheduler"]    # 上云后自动跑定时调度
     environment:
+      - TZ=Asia/Shanghai
       - POS_ACCOUNT=${POS_ACCOUNT}
       - POS_PASSWORD=${POS_PASSWORD}
       - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL}
