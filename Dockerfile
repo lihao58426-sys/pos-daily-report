@@ -24,7 +24,7 @@ RUN sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debi
 ENV PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/
 
 RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ \
-        playwright requests pyyaml \
+        playwright requests pyyaml fastapi uvicorn \
     && playwright install-deps chromium \
     && playwright install chromium \
     && rm -rf /var/lib/apt/lists/*
