@@ -7,6 +7,7 @@ import logging
 import os
 import xml.etree.ElementTree as ET
 
+import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 
@@ -21,6 +22,47 @@ app = FastAPI(title="POS Agent 回调")
 CORPID = os.getenv("WEWORK_CORPID", "")
 AGENTID = os.getenv("WEWORK_AGENTID", "")
 APPSECRET = os.getenv("WEWORK_APPSECRET", "")
+
+# access_token 缓存（有效期 2 小时，到期自动刷新）
+_access_token: dict = {"value": "", "expires_at": 0}
+
+
+def _get_access_token() -> str:
+    """获取企微 API 的 access_token（自动缓存）"""
+    import time
+    now = time.time()
+    if _access_token["value"] and now < _access_token["expires_at"]:
+        return _access_token["value"]
+
+    url = f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={CORPID}&corpsecret={APPSECRET}"
+    resp = requests.get(url, timeout=10)
+    data = resp.json()
+    if data.get("errcode") == 0:
+        _access_token["value"] = data["access_token"]
+        _access_token["expires_at"] = now + data["expires_in"] - 300
+        logger.info("access_token 已刷新")
+        return _access_token["value"]
+    else:
+        logger.error(f"获取 access_token 失败: {data}")
+        return ""
+
+
+def _send_reply(to_user: str, text: str) -> bool:
+    """通过企微 API 回复消息给指定用户"""
+    token = _get_access_token()
+    if not token:
+        return False
+    url = f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}"
+    body = {
+        "touser": to_user,
+        "msgtype": "text",
+        "agentid": int(AGENTID) if AGENTID else 0,
+        "text": {"content": text},
+    }
+    resp = requests.post(url, json=body, timeout=10)
+    ok = resp.json().get("errcode") == 0
+    logger.info(f"回复{'成功' if ok else '失败'}: {text[:50]}...")
+    return ok
 
 
 @app.get("/callback", response_class=PlainTextResponse)
@@ -50,8 +92,8 @@ async def receive_message(request: Request):
             logger.info("Agent 思考中...")
             answer = run_agent(content)
             logger.info(f"Agent 回复: {answer[:200]}")
+            _send_reply(from_user, answer)
 
-        # 先不回——C4 加企微发送功能
         return PlainTextResponse("")
 
     except ET.ParseError as e:

@@ -17,3 +17,20 @@ services:
       - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL}
     volumes:
       - ./data:/app/data                              # SQLite 数据持久化（目录挂载，支持 journal 文件）
+
+  pos-agent-callback:
+    build: .
+    image: pos-report:latest
+    container_name: pos-agent-callback
+    restart: unless-stopped
+    command: ["python", "callback_server.py"]
+    ports:
+      - "8003:8003"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - WEWORK_CORPID=${WEWORK_CORPID}
+      - WEWORK_AGENTID=${WEWORK_AGENTID}
+      - WEWORK_APPSECRET=${WEWORK_APPSECRET}
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./data:/app/data                              # 跟定时任务共享同一个数据库
