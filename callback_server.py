@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="POS Agent 回调")
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 # ── 企微自建应用参数（从环境变量读取）──
 CORPID = os.getenv("WEWORK_CORPID", "")
 AGENTID = os.getenv("WEWORK_AGENTID", "")
