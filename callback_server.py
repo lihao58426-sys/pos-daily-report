@@ -94,14 +94,21 @@ async def receive_message(request: Request):
 
         if msg_type == "text" and content:
             logger.info("Agent 思考中...")
-            answer = run_agent(content)
-            logger.info(f"Agent 回复: {answer[:200]}")
-            _send_reply(from_user, answer)
+            try:
+                answer = run_agent(content)
+                logger.info(f"Agent 回复: {answer[:200]}")
+                _send_reply(from_user, answer)
+            except Exception as agent_err:
+                logger.error(f"Agent 处理失败: {agent_err}")
+                _send_reply(from_user, "抱歉，暂时无法处理您的问题，请稍后再试。")
 
         return PlainTextResponse("")
 
     except ET.ParseError as e:
         logger.error(f"XML 解析失败: {e}")
+        return PlainTextResponse("")
+    except Exception as e:
+        logger.error(f"回调处理异常: {e}")
         return PlainTextResponse("")
 
 
