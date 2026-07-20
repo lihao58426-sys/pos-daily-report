@@ -34,22 +34,20 @@ def run_agent(user_question: str, conversation_history: list[dict] | None = None
         {"role": "user", "content": user_question},
     ]
 
-    for _ in range(MAX_TURNS):
-        # ① 问 LLM：你要调工具还是直接回答？
-        raw_reply, tool_call = call_llm(messages, TOOLS)
+    import logging
+    logger = logging.getLogger(__name__)
 
-        # ② LLM 不调工具 → 这就是最终回答
+    for _ in range(MAX_TURNS):
+        raw_reply, tool_call = call_llm(messages, TOOLS)
         if tool_call is None:
             return raw_reply
 
-        # ③ LLM 要调工具 → 执行它
         tool_result = execute_tool(tool_call["name"], tool_call.get("params", {}))
-
-        # ④ 把工具结果追加到对话历史，再进入下一轮
         messages.append({"role": "assistant", "content": raw_reply})
         messages.append({"role": "user", "content": f"工具 {tool_call['name']} 返回结果：\n{tool_result}\n\n请根据这些数据回答用户最初的问题。"})
 
-    # 超出最大轮数，强制返回最后的 LLM 回复
+    # 超出最大轮数——可能 LLM 在反复调工具但没找到答案
+    logger.warning(f"Agent 达到最大轮数 {MAX_TURNS}，强制结束。问题: {user_question[:50]}")
     return raw_reply
 
 
