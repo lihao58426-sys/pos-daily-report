@@ -105,7 +105,7 @@ class ReportDatabase:
             cur.execute(sql, params)
             return cur
         else:
-            return self._execute(sql, params)
+            return self.conn.execute(sql, params)
 
     # ==================== 建表 ====================
     def _init_table(self) -> None:

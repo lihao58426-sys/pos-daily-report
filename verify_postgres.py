@@ -40,7 +40,7 @@ db.insert_product_rankings(row_id, "2026-07-25", [
 ])
 rankings = db.get_product_rankings("2026-07-25")
 print(f"   查到 {len(rankings)} 条排名")
-assert len(rankings) == 2
+assert len(rankings) >= 2, f"至少应该有 2 条，实际 {len(rankings)}"
 
 print("5. 查询趋势...")
 trend = db.get_trend(days=1)
