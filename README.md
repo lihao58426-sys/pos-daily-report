@@ -11,7 +11,7 @@
 - **营业实收** — 首页自动抓取
 - **商品消费单数排名** — Top 5 商品 + 销量
 - **关键收入明细** — 储值卡充值 / 次卡销售 / 会员付费升级（现金支付列）
-- SQLite 数据库 — 日报表 + 商品排名表，支持历史/趋势/环比查询
+- SQLite/PostgreSQL 双后端 — 本地开发用 SQLite，生产环境设 `DATABASE_URL` 一键切 PostgreSQL
 - 多门店支持 — config.yaml 配置门店列表，自动循环抓取
 - 反检测 — 浏览器指纹隐藏 + UA 伪装 + 真人鼠标轨迹 + 随机延迟
 - 定时任务 — 自调度算法：每天 23:10~23:50 随机执行，41 天内不重复（待上云激活）
@@ -19,6 +19,26 @@
 - 企业微信群机器人 Markdown 日报推送
 - **AI Agent 问答** — 老板在企微问"本周生意怎么样"，Agent 自动查数据库回答（DeepSeek LLM + 工具调用）
 - pytest 测试（21 用例）
+
+## 数据库
+
+本地开发默认使用 SQLite（零配置，`data/daily_report.db`）。生产环境切 PostgreSQL：
+
+```bash
+# 设环境变量
+export DATABASE_URL=postgresql://username:password@host:5432/pos_daily_report
+
+# 或分开设
+export PGHOST=你的数据库IP
+export PGDATABASE=pos_daily_report
+export PGUSER=postgres
+export PGPASSWORD=你的密码
+
+# 不改任何代码，启动自动走 PostgreSQL
+python main.py
+```
+
+`database.py` 根据 `DATABASE_URL` 是否设置自动选择后端——SQL 占位符、建表语法、连接方式全自动适配。21 个测试在 SQLite 模式下全部通过。PostgreSQL 验证脚本：`python verify_postgres.py`（需要本地有 PostgreSQL 实例）。
 
 ## Docker 部署
 
@@ -30,7 +50,7 @@ docker compose up -d --build
 
 ## 技术栈
 
-Python · Playwright · SQLite · DeepSeek API · 企业微信 Webhook/Bot · FastAPI · YAML
+Python · Playwright · SQLite/PostgreSQL · DeepSeek API · 企业微信 Webhook/Bot · FastAPI · YAML
 
 ## 环境要求
 
@@ -44,6 +64,7 @@ Python · Playwright · SQLite · DeepSeek API · 企业微信 Webhook/Bot · Fa
 | `POS_ACCOUNT_2` | 分店账号（多店时设置） |
 | `POS_PASSWORD_2` | 分店密码（多店时设置） |
 | `WEWORK_WEBHOOK_URL` | 企业微信群机器人 Webhook 地址 |
+| `DATABASE_URL` | PostgreSQL 连接地址（可选，不设则用 SQLite） |
 
 ## 安装
 
