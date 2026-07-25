@@ -62,16 +62,29 @@ def _build_postgres_url() -> str | None:
 
 
 class ReportDatabase:
-    """日报数据库操作"""
+    """日报数据库操作
+
+    自动选择后端：
+      - 设了 DATABASE_URL 或 PGHOST → PostgreSQL
+      - 没设 → SQLite（默认，跟以前一样）
+    """
 
     def __init__(self, db_path: str = "daily_report.db"):
-        """打开数据库连接，自动建表（如果表不存在）
+        """打开数据库连接，自动建表"""
+        pg_url = _build_postgres_url()
 
-        Args:
-            db_path: 数据库文件路径，默认当前目录下的 daily_report.db
-        """
-        self.conn = sqlite3.connect(db_path)
-        self.conn.row_factory = sqlite3.Row  # 让查询结果可以用 row["列名"] 访问
+        if HAS_POSTGRES and pg_url:
+            # ── PostgreSQL 后端 ──
+            self.conn = psycopg2.connect(pg_url)
+            self._backend = "postgresql"
+            logger.info(f"数据库: PostgreSQL ({pg_url.split('@')[1] if '@' in pg_url else pg_url})")
+        else:
+            # ── SQLite 后端（默认）──
+            self.conn = sqlite3.connect(db_path)
+            self.conn.row_factory = sqlite3.Row  # 查询结果用 row["列名"] 访问
+            self._backend = "sqlite"
+            logger.info(f"数据库: SQLite ({db_path})")
+
         self._init_table()
 
     # ==================== 建表 ====================
