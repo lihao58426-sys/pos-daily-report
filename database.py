@@ -87,6 +87,11 @@ class ReportDatabase:
 
         self._init_table()
 
+    # ==================== 辅助 ====================
+    def _ph(self) -> str:
+        """SQL 占位符——SQLite 用 ?，PostgreSQL 用 %s"""
+        return "%s" if self._backend == "postgresql" else "?"
+
     # ==================== 建表 ====================
     def _init_table(self) -> None:
         """创建日报表（如果不存在）
@@ -140,14 +145,15 @@ class ReportDatabase:
         Returns:
             新插入行的 id
         """
+        ph = self._ph()
         date = date or datetime.now().strftime("%Y-%m-%d")
         cursor = self.conn.execute(
-            """
+            f"""
             INSERT INTO daily_reports
                 (store_id, date, revenue, time_range,
                  card_recharge, time_card_sales, gift_pack_sales, member_upgrade,
                  raw_overview)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
             """,
             (
                 store_id,
@@ -179,13 +185,13 @@ class ReportDatabase:
         if store_id:
             cursor = self.conn.execute(
                 "SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
-                "FROM daily_reports WHERE store_id = ? AND date >= ? ORDER BY date DESC",
+                f"FROM daily_reports WHERE store_id = {ph} AND date >= {ph} ORDER BY date DESC",
                 (store_id, (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")),
             )
         else:
             cursor = self.conn.execute(
                 "SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
-                "FROM daily_reports WHERE date >= ? ORDER BY date DESC",
+                f"FROM daily_reports WHERE date >= {ph} ORDER BY date DESC",
                 ((datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d"),),
             )
         return [dict(row) for row in cursor.fetchall()]
@@ -200,10 +206,10 @@ class ReportDatabase:
             [{"date": "2026-07-01", "revenue": 12345}, ...]
         """
         cursor = self.conn.execute(
-            """
+            f"""
             SELECT date, revenue
             FROM daily_reports
-            WHERE date >= ?
+            WHERE date >= {self._ph()}
             ORDER BY date ASC
             """,
             ((datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d"),),
@@ -230,10 +236,10 @@ class ReportDatabase:
         # 本月
         this_month_start = today.replace(day=1).strftime("%Y-%m-%d")
         this_data = self.conn.execute(
-            """
+            f"""
             SELECT SUM(revenue) as total, COUNT(*) as days
             FROM daily_reports
-            WHERE date >= ?
+            WHERE date >= {self._ph()}
             """,
             (this_month_start,),
         ).fetchone()
@@ -247,10 +253,10 @@ class ReportDatabase:
             last_month_end = f"{today.year}-{today.month - 1:02d}-{min(today.day, 31):02d}"
 
         last_data = self.conn.execute(
-            """
+            f"""
             SELECT SUM(revenue) as total, COUNT(*) as days
             FROM daily_reports
-            WHERE date >= ? AND date <= ?
+            WHERE date >= {self._ph()} AND date <= {self._ph()}
             """,
             (last_month_start, last_month_end),
         ).fetchone()
@@ -296,10 +302,11 @@ class ReportDatabase:
     # ==================== 商品排名 ====================
     def insert_product_rankings(self, report_id: int, date: str, products: list[dict], store_id: str = "default") -> None:
         """保存商品排名数据"""
+        ph = self._ph()
         for rank, prod in enumerate(products, 1):
             self.conn.execute(
-                "INSERT INTO product_rankings (report_id, store_id, date, rank, product_name, quantity) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                f"INSERT INTO product_rankings (report_id, store_id, date, rank, product_name, quantity) "
+                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
                 (report_id, store_id, date, rank, prod.get("name", ""), int(prod.get("count", 0))),
             )
         self.conn.commit()
@@ -309,8 +316,8 @@ class ReportDatabase:
         """查询某天的商品排名，默认查最近一天"""
         if date:
             cursor = self.conn.execute(
-                "SELECT rank, product_name, quantity FROM product_rankings "
-                "WHERE date = ? ORDER BY rank",
+                f"SELECT rank, product_name, quantity FROM product_rankings "
+                f"WHERE date = {self._ph()} ORDER BY rank",
                 (date,),
             )
         else:
