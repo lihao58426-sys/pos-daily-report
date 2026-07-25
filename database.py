@@ -20,12 +20,45 @@ SQLite 是什么？
 """
 
 import logging
+import os
 import sqlite3
 from datetime import datetime, timedelta
 
 from models import DailyReport
 
 logger = logging.getLogger(__name__)
+
+# PostgreSQL 是可选的——只有设了 DATABASE_URL 才启用
+try:
+    import psycopg2
+    HAS_POSTGRES = True
+except ImportError:
+    HAS_POSTGRES = False
+
+
+def _build_postgres_url() -> str | None:
+    """从环境变量拼出 PostgreSQL 连接地址
+
+    两种设法（选一种就行）：
+      方式 A：DATABASE_URL=postgresql://user:pass@host:5432/dbname
+      方式 B：分开设 PGHOST / PGPORT / PGDATABASE / PGUSER / PGPASSWORD
+
+    返回：连接字符串，如果都没设就返回 None（表示用 SQLite）
+    """
+    url = os.getenv("DATABASE_URL", "").strip()
+    if url:
+        return url
+
+    # 方式 B：分开设的环境变量
+    host = os.getenv("PGHOST", "")
+    if not host:
+        return None
+
+    dbname = os.getenv("PGDATABASE", "pos_daily_report")
+    user = os.getenv("PGUSER", "postgres")
+    password = os.getenv("PGPASSWORD", "")
+    port = os.getenv("PGPORT", "5432")
+    return f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
 
 
 class ReportDatabase:
