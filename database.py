@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # PostgreSQL 是可选的——只有设了 DATABASE_URL 才启用
 try:
     import psycopg2
+    from psycopg2.extras import RealDictCursor
     HAS_POSTGRES = True
 except ImportError:
     HAS_POSTGRES = False
@@ -76,6 +77,7 @@ class ReportDatabase:
         if HAS_POSTGRES and pg_url:
             # ── PostgreSQL 后端 ──
             self.conn = psycopg2.connect(pg_url)
+            self.conn.autocommit = True  # 跟 SQLite 一样——每次 execute 自动提交
             self._backend = "postgresql"
             logger.info(f"数据库: PostgreSQL ({pg_url.split('@')[1] if '@' in pg_url else pg_url})")
         else:
@@ -92,6 +94,19 @@ class ReportDatabase:
         """SQL 占位符——SQLite 用 ?，PostgreSQL 用 %s"""
         return "%s" if self._backend == "postgresql" else "?"
 
+    def _execute(self, sql: str, params: tuple = ()):
+        """执行 SQL——自动适配后端
+
+        SQLite 的 conn.execute() 是快捷写法，一步搞定。
+        psycopg2 必须手动建 cursor——这里包装掉这个差异。
+        """
+        if self._backend == "postgresql":
+            cur = self.conn.cursor(cursor_factory=RealDictCursor)  # 让结果能用 row["列名"] 访问，跟 SQLite 一样
+            cur.execute(sql, params)
+            return cur
+        else:
+            return self._execute(sql, params)
+
     # ==================== 建表 ====================
     def _init_table(self) -> None:
         """创建日报表（如果不存在）
@@ -102,7 +117,7 @@ class ReportDatabase:
         """
         pk = "SERIAL PRIMARY KEY" if self._backend == "postgresql" else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
-        self.conn.execute(f"""
+        self._execute(f"""
             CREATE TABLE IF NOT EXISTS daily_reports (
                 id              {pk},
                 store_id        TEXT    NOT NULL DEFAULT 'default',
@@ -118,7 +133,7 @@ class ReportDatabase:
             )
         """)
         # 商品排名表：一次日报对应多条商品排名记录
-        self.conn.execute(f"""
+        self._execute(f"""
             CREATE TABLE IF NOT EXISTS product_rankings (
                 id              {pk},
                 report_id       INTEGER NOT NULL,
@@ -147,13 +162,14 @@ class ReportDatabase:
         """
         ph = self._ph()
         date = date or datetime.now().strftime("%Y-%m-%d")
-        cursor = self.conn.execute(
+        cursor = self._execute(
             f"""
             INSERT INTO daily_reports
                 (store_id, date, revenue, time_range,
                  card_recharge, time_card_sales, gift_pack_sales, member_upgrade,
                  raw_overview)
             VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+            RETURNING id
             """,
             (
                 store_id,
@@ -167,9 +183,9 @@ class ReportDatabase:
                 report.raw_overview,
             ),
         )
-        self.conn.commit()
-        logger.info(f"日报已入库: id={cursor.lastrowid}, revenue={report.revenue:.0f}")
-        return cursor.lastrowid
+        row = cursor.fetchone()
+        logger.info(f"日报已入库: id={row['id']}, revenue={report.revenue:.0f}")
+        return row["id"]
 
     # ==================== 查询：历史 ====================
     def get_history(self, days: int = 30, store_id: str | None = None) -> list[dict]:
@@ -183,13 +199,13 @@ class ReportDatabase:
             按日期倒序的日报列表
         """
         if store_id:
-            cursor = self.conn.execute(
+            cursor = self._execute(
                 f"SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
                 f"FROM daily_reports WHERE store_id = {self._ph()} AND date >= {self._ph()} ORDER BY date DESC",
                 (store_id, (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")),
             )
         else:
-            cursor = self.conn.execute(
+            cursor = self._execute(
                 f"SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
                 f"FROM daily_reports WHERE date >= {self._ph()} ORDER BY date DESC",
                 ((datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d"),),
@@ -205,7 +221,7 @@ class ReportDatabase:
         Returns:
             [{"date": "2026-07-01", "revenue": 12345}, ...]
         """
-        cursor = self.conn.execute(
+        cursor = self._execute(
             f"""
             SELECT date, revenue
             FROM daily_reports
@@ -235,7 +251,7 @@ class ReportDatabase:
         today = datetime.now()
         # 本月
         this_month_start = today.replace(day=1).strftime("%Y-%m-%d")
-        this_data = self.conn.execute(
+        this_data = self._execute(
             f"""
             SELECT SUM(revenue) as total, COUNT(*) as days
             FROM daily_reports
@@ -252,7 +268,7 @@ class ReportDatabase:
             last_month_start = f"{today.year}-{today.month - 1:02d}-01"
             last_month_end = f"{today.year}-{today.month - 1:02d}-{min(today.day, 31):02d}"
 
-        last_data = self.conn.execute(
+        last_data = self._execute(
             f"""
             SELECT SUM(revenue) as total, COUNT(*) as days
             FROM daily_reports
@@ -285,7 +301,7 @@ class ReportDatabase:
         Returns:
             {"total_days": 50, "total_revenue": 500000, "avg_daily": 10000}
         """
-        row = self.conn.execute(
+        row = self._execute(
             """
             SELECT COUNT(*) as total_days,
                    SUM(revenue) as total_revenue,
@@ -304,7 +320,7 @@ class ReportDatabase:
         """保存商品排名数据"""
         ph = self._ph()
         for rank, prod in enumerate(products, 1):
-            self.conn.execute(
+            self._execute(
                 f"INSERT INTO product_rankings (report_id, store_id, date, rank, product_name, quantity) "
                 f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
                 (report_id, store_id, date, rank, prod.get("name", ""), int(prod.get("count", 0))),
@@ -315,13 +331,13 @@ class ReportDatabase:
     def get_product_rankings(self, date: str | None = None) -> list[dict]:
         """查询某天的商品排名，默认查最近一天"""
         if date:
-            cursor = self.conn.execute(
+            cursor = self._execute(
                 f"SELECT rank, product_name, quantity FROM product_rankings "
                 f"WHERE date = {self._ph()} ORDER BY rank",
                 (date,),
             )
         else:
-            cursor = self.conn.execute(
+            cursor = self._execute(
                 "SELECT date, rank, product_name, quantity FROM product_rankings "
                 "WHERE date = (SELECT MAX(date) FROM product_rankings) ORDER BY rank"
             )
