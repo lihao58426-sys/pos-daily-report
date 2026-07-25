@@ -91,11 +91,15 @@ class ReportDatabase:
     def _init_table(self) -> None:
         """创建日报表（如果不存在）
 
-        只执行一次——表不存在就建，已有就跳过（IF NOT EXISTS）。
+        自动适配后端：
+          - SQLite:     INTEGER PRIMARY KEY AUTOINCREMENT
+          - PostgreSQL: SERIAL PRIMARY KEY
         """
-        self.conn.execute("""
+        pk = "SERIAL PRIMARY KEY" if self._backend == "postgresql" else "INTEGER PRIMARY KEY AUTOINCREMENT"
+
+        self.conn.execute(f"""
             CREATE TABLE IF NOT EXISTS daily_reports (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                id              {pk},
                 store_id        TEXT    NOT NULL DEFAULT 'default',
                 date            TEXT    NOT NULL,
                 revenue         REAL    NOT NULL DEFAULT 0,
@@ -109,9 +113,9 @@ class ReportDatabase:
             )
         """)
         # 商品排名表：一次日报对应多条商品排名记录
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE TABLE IF NOT EXISTS product_rankings (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                id              {pk},
                 report_id       INTEGER NOT NULL,
                 store_id        TEXT    NOT NULL DEFAULT 'default',
                 date            TEXT    NOT NULL,
@@ -122,7 +126,7 @@ class ReportDatabase:
             )
         """)
         self.conn.commit()
-        logger.info(f"数据库就绪: {self.conn}")
+        logger.info(f"数据库就绪 ({self._backend})")
 
     # ==================== 写入 ====================
     def insert(self, report: DailyReport, date: str | None = None, store_id: str = "default") -> int:
