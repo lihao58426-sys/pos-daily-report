@@ -184,14 +184,14 @@ class ReportDatabase:
         """
         if store_id:
             cursor = self.conn.execute(
-                "SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
-                f"FROM daily_reports WHERE store_id = {ph} AND date >= {ph} ORDER BY date DESC",
+                f"SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
+                f"FROM daily_reports WHERE store_id = {self._ph()} AND date >= {self._ph()} ORDER BY date DESC",
                 (store_id, (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")),
             )
         else:
             cursor = self.conn.execute(
-                "SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
-                f"FROM daily_reports WHERE date >= {ph} ORDER BY date DESC",
+                f"SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
+                f"FROM daily_reports WHERE date >= {self._ph()} ORDER BY date DESC",
                 ((datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d"),),
             )
         return [dict(row) for row in cursor.fetchall()]
