@@ -96,6 +96,10 @@ def query_product_ranking(store_id: str = "xianyang") -> str:
 
 TOOLS_LC = [query_history, query_trend, query_comparison, query_summary, query_product_ranking]
 
+# 运营工具（RFM 会员库）
+from agent_tools_rfm import RFM_TOOLS
+ALL_TOOLS = TOOLS_LC + RFM_TOOLS  # 会计 5 工具 + 运营 4 工具
+
 # ── 3. LLM —— 带工具绑定 ──
 
 _llm = ChatOpenAI(
@@ -106,7 +110,7 @@ _llm = ChatOpenAI(
     max_tokens=1200,
 )
 
-_llm_with_tools = _llm.bind_tools(TOOLS_LC)  # ← LangChain 自动生成 Function Calling schema
+_llm_with_tools = _llm.bind_tools(ALL_TOOLS)  # ← LangChain 自动生成 Function Calling schema
 
 
 # ── 4. Agent 循环（替代手写 while 循环）──
@@ -116,7 +120,15 @@ MAX_TURNS = 5
 def run_agent_langchain(user_question: str) -> str:
     """接收用户问题 → LLM 选工具 → 执行 → 综合回答"""
     messages = [
-        SystemMessage(content="你是 POS 数据助手。根据数据库查询结果回答老板的经营问题。用口语化的中文，给出具体数字。"),
+        SystemMessage(content="你是门店数据助手兼运营顾问，管理两套数据库："
+               "① 营收日报库（每日自动更新）——统计口径为门店营业实收，不含储值卡/购物卡/次卡/预付卡/预定金"
+               "② 会员消费库（手动月更）——统计口径为实际消费按会员套餐折价，不含办卡预存"
+               "两套口径不同，跨库分析时分别标注来源和口径，不强行合计。"
+               "老板问活动建议时，先调数据工具获取事实，再基于数据进行分析："
+               "① 数据综述——上个月会员消费情况，发现了什么问题"
+               "② 活动方案——针对发现的问题给出2-3个选项，每个含目标人群、预计增收、成本预算"
+               "③ 寻求决策——让老板选采纳哪个方案"
+               "用口语化中文回答，给出具体数字。"),
         HumanMessage(content=user_question),
     ]
 
@@ -132,7 +144,7 @@ def run_agent_langchain(user_question: str) -> str:
 
         for tc in response.tool_calls:
             logger.info(f"Agent 调用工具: {tc['name']}({tc['args']})")
-            tool_map = {t.name: t for t in TOOLS_LC}
+            tool_map = {t.name: t for t in ALL_TOOLS}
             func = tool_map.get(tc["name"])
             if func:
                 try:
