@@ -61,10 +61,8 @@ def _run_summary() -> str:
 
 def _run_product_ranking(store_id: str = "xianyang", days: int = 1) -> str:
     """查商品销量排名"""
-    from datetime import datetime, timedelta
     with ReportDatabase(DB_PATH) as db:
-        # 兼容多天查询：取最近几天的排名（简化处理，取最新一天）
-        rows = db.get_product_rankings()
+        rows = db.get_product_rankings(store_id=store_id)
     if not rows:
         return f"{store_id} 暂无商品排名数据。"
     date = rows[0].get("date", "最近")

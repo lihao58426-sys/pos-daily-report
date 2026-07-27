@@ -328,19 +328,34 @@ class ReportDatabase:
         self.conn.commit()
         logger.info(f"商品排名已入库: {len(products)} 条")
 
-    def get_product_rankings(self, date: str | None = None) -> list[dict]:
-        """查询某天的商品排名，默认查最近一天"""
+    def get_product_rankings(self, date: str | None = None, store_id: str | None = None) -> list[dict]:
+        """查询某天的商品排名，默认查最近一天。可按门店过滤。"""
+        ph = self._ph()
         if date:
-            cursor = self._execute(
-                f"SELECT rank, product_name, quantity FROM product_rankings "
-                f"WHERE date = {self._ph()} ORDER BY rank",
-                (date,),
-            )
+            if store_id:
+                cursor = self._execute(
+                    f"SELECT rank, product_name, quantity FROM product_rankings "
+                    f"WHERE date = {ph} AND store_id = {ph} ORDER BY rank",
+                    (date, store_id),
+                )
+            else:
+                cursor = self._execute(
+                    f"SELECT rank, product_name, quantity FROM product_rankings "
+                    f"WHERE date = {ph} ORDER BY rank",
+                    (date,),
+                )
         else:
-            cursor = self._execute(
-                "SELECT date, rank, product_name, quantity FROM product_rankings "
-                "WHERE date = (SELECT MAX(date) FROM product_rankings) ORDER BY rank"
-            )
+            if store_id:
+                cursor = self._execute(
+                    f"SELECT date, rank, product_name, quantity FROM product_rankings "
+                    f"WHERE date = (SELECT MAX(date) FROM product_rankings) AND store_id = {ph} ORDER BY rank",
+                    (store_id,),
+                )
+            else:
+                cursor = self._execute(
+                    "SELECT date, rank, product_name, quantity FROM product_rankings "
+                    "WHERE date = (SELECT MAX(date) FROM product_rankings) ORDER BY rank"
+                )
         return [dict(row) for row in cursor.fetchall()]
 
     # ==================== 收尾 ====================
