@@ -129,7 +129,8 @@ class ReportDatabase:
                 gift_pack_sales REAL    DEFAULT 0,
                 member_upgrade  REAL    DEFAULT 0,
                 raw_overview    TEXT    DEFAULT '',
-                created_at      TEXT    DEFAULT CURRENT_TIMESTAMP
+                created_at      TEXT    DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(store_id, date)
             )
         """)
         # 商品排名表：一次日报对应多条商品排名记录
@@ -162,15 +163,29 @@ class ReportDatabase:
         """
         ph = self._ph()
         date = date or datetime.now().strftime("%Y-%m-%d")
+
+        if self._backend == "postgresql":
+            sql = f"""
+                INSERT INTO daily_reports
+                    (store_id, date, revenue, time_range,
+                     card_recharge, time_card_sales, gift_pack_sales, member_upgrade,
+                     raw_overview)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+                ON CONFLICT (store_id, date) DO NOTHING
+                RETURNING id
+            """
+        else:
+            sql = f"""
+                INSERT OR IGNORE INTO daily_reports
+                    (store_id, date, revenue, time_range,
+                     card_recharge, time_card_sales, gift_pack_sales, member_upgrade,
+                     raw_overview)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+                RETURNING id
+            """
+
         cursor = self._execute(
-            f"""
-            INSERT INTO daily_reports
-                (store_id, date, revenue, time_range,
-                 card_recharge, time_card_sales, gift_pack_sales, member_upgrade,
-                 raw_overview)
-            VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
-            RETURNING id
-            """,
+            sql,
             (
                 store_id,
                 date,
@@ -184,8 +199,12 @@ class ReportDatabase:
             ),
         )
         row = cursor.fetchone()
-        logger.info(f"日报已入库: id={row['id']}, revenue={report.revenue:.0f}")
-        return row["id"]
+        if row is not None:
+            logger.info(f"日报已入库: id={row['id']}, revenue={report.revenue:.0f}")
+            return row["id"]
+        else:
+            logger.info(f"日报重复跳过: store={store_id}, date={date}")
+            return None
 
     # ==================== 查询：历史 ====================
     def get_history(self, days: int = 30, store_id: str | None = None) -> list[dict]:
