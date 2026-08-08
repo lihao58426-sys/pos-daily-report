@@ -30,13 +30,26 @@ logger = logging.getLogger(__name__)
 
 @tool
 def query_history(store_id: str = "xianyang", days: int = 7) -> str:
-    """查指定门店最近N天的营收数据。返回每天日期、营业额、储值卡消费、次卡消费。
+    """查指定门店最近N天的收银日报。返回每天营业实收（总额）及其构成明细。
+    注意：储值卡、次卡、礼品包等是营收的子项拆分——营收已经包含了它们，不要重复相加。
     用于回答'最近生意怎么样''这周卖了多少'这类问题。"""
     with ReportDatabase(DB_PATH) as db:
         rows = db.get_history(days=days, store_id=store_id)
     if not rows:
         return f"{store_id} 最近 {days} 天暂无数据。"
-    lines = [f"{r['date']} | 营收 {r['revenue']:.0f} 元 | 储值卡 {r['card_recharge']:.0f} | 次卡 {r['time_card_sales']:.0f}" for r in rows]
+    lines = []
+    for r in rows:
+        parts = [f"营业实收 {r['revenue']:.0f} 元"]
+        card = r.get('card_recharge', 0) or 0
+        time_card = r.get('time_card_sales', 0) or 0
+        gift = r.get('gift_pack_sales', 0) or 0
+        if card or time_card or gift:
+            sub = []
+            if card: sub.append(f"储值卡 {card:.0f}")
+            if time_card: sub.append(f"次卡 {time_card:.0f}")
+            if gift: sub.append(f"礼品包 {gift:.0f}")
+            parts.append("（其中: " + ", ".join(sub) + "）")
+        lines.append(f"{r['date']} | {' '.join(parts)}")
     return "\n".join(lines)
 
 
@@ -120,10 +133,15 @@ MAX_TURNS = 5
 def run_agent_langchain(user_question: str) -> str:
     """接收用户问题 → LLM 选工具 → 执行 → 综合回答"""
     messages = [
-        SystemMessage(content="你是门店数据助手兼运营顾问，管理两套数据库："
-               "① 营收日报库（每日自动更新）——统计口径为门店营业实收，不含储值卡/购物卡/次卡/预付卡/预定金"
-               "② 会员消费库（手动月更）——统计口径为实际消费按会员套餐折价，不含办卡预存"
-               "两套口径不同，跨库分析时分别标注来源和口径，不强行合计。"
+        SystemMessage(content="你是门店数据助手兼运营顾问，管理两套数据库：\n"
+               "① 营收日报库（POS 每日自动抓取）\n"
+               "   统计口径：门店营业实收 = 银豹收银系统当天全部现金收入。\n"
+               "   包含：储值卡消费、次卡消费、礼品包、会员升级等各类流水。\n"
+               "   工具返回的「储值卡/次卡/礼品包」是营业实收的子项拆分，不是额外收入——不要再把它们加上去。\n"
+               "② 会员消费库（RFM 手动导入）\n"
+               "   统计口径：会员实际消费金额，已按会员套餐折扣折价。\n"
+               "   不含办卡预存（储值行为不算消费）。\n"
+               "   POS 营收看收银台流水，RFM 消费看会员行为——两套口径不同，跨库时分别标注，不要强凑总数。"
                "老板问活动建议时，先调数据工具获取事实，再基于数据进行分析："
                "① 数据综述——上个月会员消费情况，发现了什么问题"
                "② 活动方案——针对发现的问题给出2-3个选项，每个含目标人群、预计增收、成本预算"

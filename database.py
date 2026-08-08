@@ -219,13 +219,15 @@ class ReportDatabase:
         """
         if store_id:
             cursor = self._execute(
-                f"SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
+                f"SELECT store_id, date, revenue, card_recharge, time_card_sales, "
+                f"gift_pack_sales, member_upgrade "
                 f"FROM daily_reports WHERE store_id = {self._ph()} AND date >= {self._ph()} ORDER BY date DESC",
                 (store_id, (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")),
             )
         else:
             cursor = self._execute(
-                f"SELECT store_id, date, revenue, card_recharge, time_card_sales, member_upgrade "
+                f"SELECT store_id, date, revenue, card_recharge, time_card_sales, "
+                f"gift_pack_sales, member_upgrade "
                 f"FROM daily_reports WHERE date >= {self._ph()} ORDER BY date DESC",
                 ((datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d"),),
             )

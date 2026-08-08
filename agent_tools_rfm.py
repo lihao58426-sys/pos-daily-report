@@ -112,7 +112,8 @@ def _compute_rfm(as_of: date | None = None) -> list[dict]:
 
 @tool
 def query_segments(as_of: str = "") -> str:
-    """查 RFM 客户分群概况——各分群的人数、营收贡献、人均消费。
+    """查 RFM 客户分群概况——各分群的人数、消费总额、人均消费。
+    注意：这里金额是 RFM 口径（会员实际消费折价），与 POS 营业实收口径不同，不可混加。
     as_of 格式 YYYY-MM-DD，指定截止日期。不传默认今天。
     用于回答'会员分群情况怎么样''哪个分群人数最多'。"""
     try:
