@@ -17,6 +17,7 @@ __pycache__/
 # 调试 HTML
 *_page.html
 *_overview.html
+product_sales.html
 
 # 临时调试输出
 crawl_output.txt
