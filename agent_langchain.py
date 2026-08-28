@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # ── 1. 用 @tool 装饰器定义工具（替代手写的 TOOLS 字典）──
 
 @tool
-def query_history(store_id: str = "xianyang", days: int = 7) -> str:
+def query_history(store_id: str = "总店", days: int = 7) -> str:
     """查指定门店最近N天的收银日报。返回每天营业实收（总额）及其构成明细。
     注意：储值卡、次卡、礼品包等是营收的子项拆分——营收已经包含了它们，不要重复相加。
     用于回答'最近生意怎么样''这周卖了多少'这类问题。"""
@@ -91,7 +91,7 @@ def query_summary() -> str:
 
 
 @tool
-def query_product_ranking(store_id: str = "xianyang", days: int = 1) -> str:
+def query_product_ranking(store_id: str = "总店", days: int = 1) -> str:
     """查商品销量排名。days=1（默认）查最近一天；days=7/30 时按最近 N 天聚合返回各商品累计销量排名。
     用于回答'哪个卖得最好''这个月什么最好卖''最近一周卖得最好的商品'。"""
     with ReportDatabase(DB_PATH) as db:

@@ -156,7 +156,7 @@ class ReportDatabase:
         Args:
             report: DailyReport 对象（来自 models.py）
             date: 日期字符串，默认今天
-            store_id: 门店标识（如 "xianyang"）
+            store_id: 门店标识（如 "总店"）
 
         Returns:
             新插入行的 id

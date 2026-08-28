@@ -14,7 +14,7 @@
 # ── 门店列表 ──
 # 只有一个店就保留一项，开分店了在下面加
 stores:
-  - id: "xianyang"
+  - id: "总店"
     name: "咸阳总店"
     account_env: "POS_ACCOUNT"        # 环境变量名
     password_env: "POS_PASSWORD"

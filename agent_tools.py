@@ -6,7 +6,7 @@ Agent 工具集 — 把数据库查询函数包装成 LLM 可调用的 Tool
 
 用法：
   from agent_tools import TOOLS, execute_tool
-  result = execute_tool("query_history", {"store_id": "xianyang", "days": 7})
+  result = execute_tool("query_history", {"store_id": "总店", "days": 7})
 
 Agent 循环逻辑见 agent.py（下一个 commit）。
 """
@@ -18,7 +18,7 @@ DB_PATH = "data/daily_report.db"
 
 # ── 工具执行函数 ──
 
-def _run_query_history(store_id: str = "xianyang", days: int = 7) -> str:
+def _run_query_history(store_id: str = "总店", days: int = 7) -> str:
     """查指定门店最近 N 天的营收数据"""
     with ReportDatabase(DB_PATH) as db:
         rows = db.get_history(days=days, store_id=store_id)
@@ -59,7 +59,7 @@ def _run_summary() -> str:
     )
 
 
-def _run_product_ranking(store_id: str = "xianyang", days: int = 1) -> str:
+def _run_product_ranking(store_id: str = "总店", days: int = 1) -> str:
     """查商品销量排名（days=1 查最近一天；days>1 按最近 N 天聚合汇总）"""
     with ReportDatabase(DB_PATH) as db:
         rows = db.get_product_rankings(store_id=store_id, days=days)
@@ -84,7 +84,7 @@ TOOLS = [
         "name": "query_history",
         "description": "查指定门店最近N天的营收数据。返回每天日期、营业额、储值卡消费、次卡消费。用于回答'最近生意怎么样''这周卖了多少'这类问题。",
         "parameters": {
-            "store_id": "门店ID，可选值：xianyang（咸阳总店）。不传默认 xianyang。",
+            "store_id": "门店ID，可选值：总店。不传默认 总店。",
             "days": "查最近几天，默认7天。老板问'这周'=7，'这个月'=30。",
         },
     },
@@ -109,7 +109,7 @@ TOOLS = [
         "name": "query_product_ranking",
         "description": "查商品销量排名。days=1（默认）查最近一天；days=7/30 时按最近 N 天聚合，返回各商品累计销量排名。用于回答'哪个卖得最好''这个月什么最好卖''最近一周卖得最好的商品'。",
         "parameters": {
-            "store_id": "门店ID，默认 xianyang。",
+            "store_id": "门店ID，默认 总店。",
             "days": "查最近几天：默认1（单日排名）。老板问'这个月'=30，'最近一周'=7，'昨天'=1。",
         },
     },
