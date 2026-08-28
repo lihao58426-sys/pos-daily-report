@@ -23,11 +23,15 @@ RUN sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debi
 #   playwright install chromium → 走 npmmirror 镜像
 ENV PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/
 
+# 注意：这层命令与旧镜像完全一致，命中构建缓存即可避免重装 Chromium
 RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ \
-        playwright requests pyyaml fastapi uvicorn langchain-core \
+        playwright requests pyyaml fastapi uvicorn \
     && playwright install-deps chromium \
     && playwright install chromium \
     && rm -rf /var/lib/apt/lists/*
+
+# 第4.5步：Agent 新增依赖 langchain-core（独立小层，增量安装，不触发 Chromium 重装）
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ langchain-core
 
 # 第5步：复制代码
 COPY *.py .
