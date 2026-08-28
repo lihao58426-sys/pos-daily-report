@@ -349,9 +349,30 @@ class ReportDatabase:
         self.conn.commit()
         logger.info(f"商品排名已入库: {len(products)} 条")
 
-    def get_product_rankings(self, date: str | None = None, store_id: str | None = None) -> list[dict]:
-        """查询某天的商品排名，默认查最近一天。可按门店过滤。"""
+    def get_product_rankings(self, date: str | None = None, store_id: str | None = None, days: int | None = None) -> list[dict]:
+        """查询商品排名：某天 / 最近一天 / 最近 N 天聚合。可按门店过滤。
+
+        - date 指定 → 当天排名（rank, product_name, quantity）
+        - 仅 store_id → 最近一天排名（date, rank, product_name, quantity）
+        - days>1 → 最近 N 天聚合（product_name, total_qty, days_sold，按累计销量降序 Top10）
+        """
         ph = self._ph()
+        if days is not None and days > 1:
+            # 最近 N 天聚合：按商品累计销量排序（SQLite 日期语法，启用 PostgreSQL 时需改用 interval）
+            conditions, params = [], []
+            if store_id:
+                conditions.append(f"store_id = {ph}")
+                params.append(store_id)
+            where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+            cursor = self._execute(
+                f"SELECT product_name, SUM(quantity) as total_qty, COUNT(DISTINCT date) as days_sold "
+                f"FROM product_rankings "
+                f"{where_sql} AND date >= date((SELECT MAX(date) FROM product_rankings), {ph}) "
+                f"AND product_name NOT IN ({ph}, {ph}) "
+                f"GROUP BY product_name ORDER BY total_qty DESC LIMIT 10",
+                params + [f"-{days} days", "-", ""],
+            )
+            return [dict(row) for row in cursor.fetchall()]
         if date:
             if store_id:
                 cursor = self._execute(

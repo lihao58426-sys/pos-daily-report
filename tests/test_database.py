@@ -7,8 +7,13 @@ import sys
 sys.path.insert(0, '..')
 
 import os
+from datetime import datetime, timedelta
 from database import ReportDatabase
 from models import DailyReport
+
+# 测试日期用相对"今天"的值，避免硬编码日期随日历过期导致用例失败
+_TODAY = datetime.now()
+RECENT_DATE = (_TODAY - timedelta(days=1)).strftime("%Y-%m-%d")
 
 
 class TestReportDatabase:
@@ -23,7 +28,7 @@ class TestReportDatabase:
     def test_insert_and_get_history(self):
         """插入一条 → 查历史能查到"""
         report = DailyReport(revenue=10000, card_recharge=3000, time_card_sales=1500)
-        rid = self.db.insert(report, date="2026-07-10", store_id="test")
+        rid = self.db.insert(report, date=RECENT_DATE, store_id="test")
         assert rid > 0  # 插入成功，返回了 ID
 
         rows = self.db.get_history(days=30)
@@ -48,7 +53,7 @@ class TestReportDatabase:
         """多店数据隔离"""
         # 插入另一家店
         report = DailyReport(revenue=5000)
-        self.db.insert(report, date="2026-07-10", store_id="store_b")
+        self.db.insert(report, date=RECENT_DATE, store_id="store_b")
 
         # 只查 test 店
         rows = self.db.get_history(days=30, store_id="test")
@@ -68,3 +73,23 @@ class TestReportDatabase:
         )
         rankings = self.db.get_product_rankings()
         assert len(rankings) >= 2
+
+    def test_get_product_rankings_days_aggregation(self):
+        """跨 N 天聚合：最近 2 天销量应正确汇总并排序"""
+        d1 = (_TODAY - timedelta(days=2)).strftime("%Y-%m-%d")
+        d2 = (_TODAY - timedelta(days=1)).strftime("%Y-%m-%d")
+        self.db.insert_product_rankings(
+            report_id=1, date=d1,
+            products=[{"name": "蹦床", "count": "10"}, {"name": "卡丁车", "count": "5"}],
+            store_id="test",
+        )
+        self.db.insert_product_rankings(
+            report_id=1, date=d2,
+            products=[{"name": "蹦床", "count": "20"}, {"name": "淘气堡", "count": "8"}],
+            store_id="test",
+        )
+        rows = self.db.get_product_rankings(store_id="test", days=2)
+        assert len(rows) >= 3  # 蹦床 + 卡丁车 + 淘气堡
+        assert rows[0]["product_name"] == "蹦床"
+        assert rows[0]["total_qty"] == 30  # 10 + 20 = 30
+        assert rows[0]["days_sold"] == 2

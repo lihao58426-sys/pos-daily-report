@@ -47,7 +47,7 @@ def _compute_rfm(as_of: date | None = None) -> list[dict]:
 
     # 缓存命中
     now = time.time()
-    if _cache_result is not None and _cache_key == _cache_result[0] and (now - _cache_ts) < _cache_ttl:
+    if _cache_result is not None and cache_key == _cache_result[0] and (now - _cache_ts) < _cache_ttl:
         return _cache_result[1]
 
     conn = sqlite3.connect(RFM_DB)

@@ -91,17 +91,22 @@ def query_summary() -> str:
 
 
 @tool
-def query_product_ranking(store_id: str = "xianyang") -> str:
-    """查最近一天的商品销量排名 Top10。
-    用于回答'哪个卖得最好''什么最好卖'。"""
+def query_product_ranking(store_id: str = "xianyang", days: int = 1) -> str:
+    """查商品销量排名。days=1（默认）查最近一天；days=7/30 时按最近 N 天聚合返回各商品累计销量排名。
+    用于回答'哪个卖得最好''这个月什么最好卖''最近一周卖得最好的商品'。"""
     with ReportDatabase(DB_PATH) as db:
-        rows = db.get_product_rankings(store_id=store_id)
+        rows = db.get_product_rankings(store_id=store_id, days=days)
     if not rows:
         return f"{store_id} 暂无商品排名数据。"
-    date = rows[0].get("date", "最近")
-    lines = [f"{date} {store_id} 商品排名："]
-    for r in rows[:10]:
-        lines.append(f"  #{r['rank']} {r['product_name']} ×{r['quantity']}")
+    if days > 1:
+        lines = [f"{store_id} 最近 {days} 天商品销量聚合排名："]
+        for i, r in enumerate(rows[:10], 1):
+            lines.append(f"  #{i} {r['product_name']} 共售出 {r['total_qty']} 次（覆盖 {r['days_sold']} 天）")
+    else:
+        date = rows[0].get("date", "最近")
+        lines = [f"{date} {store_id} 商品排名："]
+        for r in rows[:10]:
+            lines.append(f"  #{r['rank']} {r['product_name']} ×{r['quantity']}")
     return "\n".join(lines)
 
 
