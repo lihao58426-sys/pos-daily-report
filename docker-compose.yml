@@ -1,8 +1,8 @@
-# ── POS 日报推送 — 服务编排 ──
-# POS 是定时任务而非 Web 服务，不暴露端口，只跑调度器。
-# 用法：
-#   docker compose up -d          # 后台启动，每天 23:10~23:50 自动推日报
-#   docker compose logs -f        # 看调度日志
+# ── POS 日报推送 + Agent 问答 — 服务编排 ──
+# pos-daily-report  每天 23:10~23:50 定时推日报（无端口）
+# pos-agent-callback 企微回调（8003，已被 web 入口取代，保留参考）
+# pos-agent-web      浏览器问答入口（8005，当前主入口）
+# 用法：docker compose up -d --build   /   docker compose logs -f pos-agent-web
 
 services:
   pos-daily-report:
@@ -10,14 +10,14 @@ services:
     image: pos-report:latest
     container_name: pos-daily-report
     restart: unless-stopped
-    command: ["python", "main.py", "--scheduler"]    # 上云后自动跑定时调度
+    command: ["python", "main.py", "--scheduler"]
     environment:
       - TZ=Asia/Shanghai
       - POS_ACCOUNT=${POS_ACCOUNT}
       - POS_PASSWORD=${POS_PASSWORD}
       - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL}
     volumes:
-      - ./data:/app/data                              # SQLite 数据持久化（目录挂载，支持 journal 文件）
+      - ./data:/app/data
 
   pos-agent-callback:
     build: .
@@ -34,4 +34,20 @@ services:
       - WEWORK_APPSECRET=${WEWORK_APPSECRET}
       - TZ=Asia/Shanghai
     volumes:
-      - ./data:/app/data                              # 跟定时任务共享同一个数据库
+      - ./data:/app/data
+      - ../rfm-report/data:/rfm_report/data
+
+  pos-agent-web:
+    build: .
+    image: pos-report:latest
+    container_name: pos-agent-web
+    restart: unless-stopped
+    command: ["python", "web_agent.py"]
+    ports:
+      - "8005:8005"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./data:/app/data
+      - ../rfm-report/data:/rfm_report/data
