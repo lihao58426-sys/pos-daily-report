@@ -12,7 +12,7 @@
 import os
 import sqlite3
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from langchain_core.tools import tool
 
@@ -210,16 +210,25 @@ def query_member_trend(months: int = 6) -> str:
 @tool
 def query_new_members(month: str = "") -> str:
     """查某月新增会员数量，与上月对比。
-    month 格式 YYYY-MM，不传默认查上个月。
+    month 格式 YYYY-MM。不传默认查本月。
     用于回答'这个月新增了多少会员''新客有没有变多'。"""
     try:
         if not month:
-            now = datetime.now()
-            first_of_this = now.replace(day=1)
-            month = (first_of_this - timedelta(days=1)).strftime("%Y-%m")
+            month = datetime.now().strftime("%Y-%m")
 
         conn = sqlite3.connect(RFM_DB)
         conn.row_factory = sqlite3.Row
+
+        # 数据覆盖范围守卫——防止 LLM 问出数据范围外的月份（如 2025-06）导致误判为 0 人
+        range_row = conn.execute(
+            "SELECT MIN(SUBSTR(trans_date, 1, 7)) lo, MAX(SUBSTR(trans_date, 1, 7)) hi FROM transactions"
+        ).fetchone()
+        lo = str(range_row["lo"] or "")
+        hi = str(range_row["hi"] or "")
+        if lo and (month < lo or month > hi):
+            conn.close()
+            return (f"查询失败: 月份 {month} 不在数据范围内（数据覆盖 {lo} ~ {hi}）。"
+                    f"如需查本月，请使用 {datetime.now().strftime('%Y-%m')}。")
 
         # 当月首次消费的会员
         this_new = conn.execute("""
