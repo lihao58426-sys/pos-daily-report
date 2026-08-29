@@ -10,7 +10,7 @@
 关键设计：所有日期都相对"今天"往前推——任何时候跑都是"最新数据"，永不过期。
 
 跟 demo 容器配合：容器里设了 POS_DB_PATH / RFM_DB_PATH 环境变量指向假库，
-Agent 的 9 个工具就自动查假库（代码零改动）。
+Agent 的 11 个工具就自动查假库（代码零改动）。
 
 用法：
   python seed_demo_db.py
@@ -23,7 +23,9 @@ import sqlite3
 from datetime import date, datetime, timedelta
 
 # 固定随机种子 → 同一台机器同一天跑两次，结果一模一样（可复现）
-random.seed(42)
+# 注意：POS 和 RFM 各用独立的 RNG 实例 —— 否则改 POS_DAYS 会连带改变 RFM 数据（共享随机流的下游污染）
+_RNG_POS = random.Random(42)
+_RNG_RFM = random.Random(42)
 
 TODAY = date.today()
 YESTERDAY = TODAY - timedelta(days=1)
@@ -68,8 +70,10 @@ _SURNAMES = "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕�
 _GIVEN = ["伟", "芳", "娜", "敏", "静", "磊", "军", "洋", "勇", "艳", "杰", "娟", "涛", "明", "超", "秀英", "慧", "丹", "浩", "雪"]
 
 
-def _fake_name() -> str:
-    return random.choice(_SURNAMES) + random.choice(_GIVEN)
+def _fake_name(rng=None) -> str:
+    """随机中文姓名（rng 传入独立随机源，默认用全局）"""
+    rng = rng or random
+    return rng.choice(_SURNAMES) + rng.choice(_GIVEN)
 
 
 def _fake_phone(idx: int) -> str:
@@ -130,13 +134,13 @@ def gen_pos() -> None:
         date_str = day.isoformat()
         is_weekend = day.weekday() >= 5
         # 营收：周末高、工作日低；整体每月约 +8% 增长
-        base = random.uniform(16000, 30000) if is_weekend else random.uniform(8000, 15000)
+        base = _RNG_POS.uniform(16000, 30000) if is_weekend else _RNG_POS.uniform(8000, 15000)
         growth = 1 + 0.08 * (i / 30)
         revenue = int(base * growth)
-        card_recharge = int(revenue * random.uniform(0.12, 0.18))
-        time_card_sales = int(revenue * random.uniform(0.06, 0.10))
-        gift_pack_sales = int(revenue * random.uniform(0.03, 0.06))
-        member_upgrade = random.choice([0, 0, 0, 100, 200])  # 偶尔有会员付费升级
+        card_recharge = int(revenue * _RNG_POS.uniform(0.12, 0.18))
+        time_card_sales = int(revenue * _RNG_POS.uniform(0.06, 0.10))
+        gift_pack_sales = int(revenue * _RNG_POS.uniform(0.03, 0.06))
+        member_upgrade = _RNG_POS.choice([0, 0, 0, 100, 200])  # 偶尔有会员付费升级
 
         cur.execute(
             "INSERT INTO daily_reports (store_id, date, revenue, time_range, card_recharge, "
@@ -150,7 +154,7 @@ def gen_pos() -> None:
         # 商品排名：每天 10 个商品按销量降序
         items = []
         for name, lo, hi in PRODUCTS:
-            qty = random.randint(lo, hi)
+            qty = _RNG_POS.randint(lo, hi)
             if is_weekend and name == "蹦床组合乐园":
                 qty = int(qty * 1.3)  # 周末蹦床更火爆
             items.append((name, qty))
@@ -191,27 +195,27 @@ def gen_rfm() -> None:
     idx = 0
     for seg, n, (rec_lo, rec_hi), monthly_visits, (m_lo, m_hi), (jk_min, jk_max) in SEGMENTS:
         for _ in range(n):
-            name = _fake_name()
+            name = _fake_name(_RNG_RFM)
             phone = _fake_phone(idx)
             idx += 1
             # 最后访问日落在分群要求的 recency 区间（相对今天）
-            last_visit = YESTERDAY - timedelta(days=random.randint(rec_lo, rec_hi))
+            last_visit = YESTERDAY - timedelta(days=_RNG_RFM.randint(rec_lo, rec_hi))
             # 入会月份：窗口内"越近越多"→ 每月新增会员呈增长曲线
             weights = [1.0 / (k + 1) for k in range(jk_min, jk_max + 1)]
-            k = random.choices(range(jk_min, jk_max + 1), weights=weights)[0]
+            k = _RNG_RFM.choices(range(jk_min, jk_max + 1), weights=weights)[0]
             ms = _month_ago_start(k)
-            join_date = ms + timedelta(days=random.randint(0, _days_in_month(ms) - 1))
+            join_date = ms + timedelta(days=_RNG_RFM.randint(0, _days_in_month(ms) - 1))
             if join_date > last_visit:
-                join_date = last_visit - timedelta(days=random.randint(0, 7))  # 兜底：入会不晚于最后访问
+                join_date = last_visit - timedelta(days=_RNG_RFM.randint(0, 7))  # 兜底：入会不晚于最后访问
             span_days = (last_visit - join_date).days
-            total_visits = max(1, int((span_days / 30) * monthly_visits * random.uniform(0.8, 1.2)))
-            offsets = sorted(random.sample(range(span_days + 1), min(total_visits, span_days + 1)))
+            total_visits = max(1, int((span_days / 30) * monthly_visits * _RNG_RFM.uniform(0.8, 1.2)))
+            offsets = sorted(_RNG_RFM.sample(range(span_days + 1), min(total_visits, span_days + 1)))
             if offsets and offsets[-1] != span_days:
                 offsets[-1] = span_days  # 保证最后访问日 = 分群要求的最近访问
             for d in offsets:
                 vd = join_date + timedelta(days=d)
-                revenue = round(random.uniform(m_lo, m_hi), 2)
-                ts = f"{vd} {random.randint(9, 21):02d}:{random.randint(0, 59):02d}:{random.randint(0, 59):02d}"
+                revenue = round(_RNG_RFM.uniform(m_lo, m_hi), 2)
+                ts = f"{vd} {_RNG_RFM.randint(9, 21):02d}:{_RNG_RFM.randint(0, 59):02d}:{_RNG_RFM.randint(0, 59):02d}"
                 rows.append((name, phone, ts, revenue, batch, now))
     cur.executemany(
         "INSERT INTO transactions (member_name, phone, trans_date, revenue, batch, created_at) "

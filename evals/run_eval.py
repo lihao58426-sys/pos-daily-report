@@ -73,6 +73,9 @@ def check_item(item: dict, resp: dict) -> list[str]:
     for must in item.get("must_contain", []) or []:
         if must and must not in answer:
             problems.append(f"回答缺少关键字: {must}")
+    for group in item.get("must_contain_any", []) or []:
+        if not any(k in answer for k in group):
+            problems.append(f"回答缺少以下任一关键字: {group}")
     for notmust in item.get("must_not_contain", []) or []:
         if notmust and notmust in answer:
             problems.append(f"回答不应包含: {notmust}")
@@ -114,6 +117,12 @@ def main() -> int:
     parser.add_argument("--id", default="", help="只跑指定 id 的黄金问题")
     parser.add_argument("--base-url", default=BASE_URL, help="Agent 服务地址")
     args = parser.parse_args()
+
+    # Windows 控制台默认 GBK，避免中文/符号打印崩溃（输出改为 UTF-8，无法编码时降级为?）
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
     golden = load_golden()
     if args.id:

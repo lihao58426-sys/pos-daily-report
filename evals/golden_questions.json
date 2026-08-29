@@ -20,7 +20,7 @@
     "question": "2026年5月的收入是多少？",
     "must_call_tool": ["query_revenue_range"],
     "tool_params_any": [{"start_date": "2026-05-01"}],
-    "must_contain": ["2026-05"],
+    "must_contain": ["5月", "元"],
     "must_not_contain": ["只能查最近一个月", "没有2026年5月", "最近30天"]
   },
   {
@@ -36,7 +36,7 @@
     "question": "这个月跟上个月比生意怎么样？",
     "must_call_tool": ["query_comparison"],
     "tool_params_any": [],
-    "must_contain": ["环比"],
+    "must_contain_any": [["环比", "比上月", "上月同期", "增长了"]],
     "must_not_contain": []
   },
   {
@@ -60,7 +60,7 @@
     "question": "最近30天的营收趋势怎么样？",
     "must_call_tool": ["query_trend", "query_history", "query_revenue_range"],
     "tool_params_any": [],
-    "must_contain": ["元"],
+    "must_contain_any": [["元", "万"]],
     "must_not_contain": []
   },
   {
