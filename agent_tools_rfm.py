@@ -230,32 +230,28 @@ def query_new_members(month: str = "") -> str:
             return (f"查询失败: 月份 {month} 不在数据范围内（数据覆盖 {lo} ~ {hi}）。"
                     f"如需查本月，请使用 {datetime.now().strftime('%Y-%m')}。")
 
-        # 当月首次消费的会员
-        this_new = conn.execute("""
-            SELECT COALESCE(NULLIF(phone,''), member_name) as uid
-            FROM transactions
-            WHERE SUBSTR(trans_date, 1, 7) = ?
-            GROUP BY uid
-            HAVING MIN(trans_date) >= ?
-        """, (month, month + "-01")).fetchall()
+        # 先按会员算全时段首访日期，再按首访月份统计 → 真正的"新增会员"
+        # 注意：不能在 WHERE 里先过滤月份再 MIN(trans_date)——那会统计成"当月活跃人数"
+        def _count_new(m: str) -> int:
+            row = conn.execute("""
+                SELECT COUNT(*) AS n FROM (
+                    SELECT COALESCE(NULLIF(phone,''), member_name) as uid
+                    FROM transactions
+                    WHERE phone != '佚名' AND phone != '' AND member_name != ''
+                      AND CAST(revenue AS REAL) > 0
+                    GROUP BY uid
+                    HAVING SUBSTR(MIN(trans_date), 1, 7) = ?
+                )
+            """, (m,)).fetchone()
+            return int(row["n"])
+
+        this_count = _count_new(month)
 
         # 上月
         y, m = map(int, month.split("-"))
-        if m == 1:
-            prev_month = f"{y-1}-12"
-        else:
-            prev_month = f"{y}-{m-1:02d}"
-        prev_new = conn.execute("""
-            SELECT COALESCE(NULLIF(phone,''), member_name) as uid
-            FROM transactions
-            WHERE SUBSTR(trans_date, 1, 7) = ?
-            GROUP BY uid
-            HAVING MIN(trans_date) >= ?
-        """, (prev_month, prev_month + "-01")).fetchall()
+        prev_month = f"{y-1}-12" if m == 1 else f"{y}-{m-1:02d}"
+        prev_count = _count_new(prev_month)
         conn.close()
-
-        this_count = len(this_new)
-        prev_count = len(prev_new)
 
         change_str = ""
         if prev_count > 0:
