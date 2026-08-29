@@ -18,6 +18,7 @@ Web 版 Agent — 本地闭环的真实 Agent（浏览器对话入口，替代�
 """
 
 import logging
+import os
 import uuid
 
 from fastapi import FastAPI
@@ -186,5 +187,6 @@ CHAT_PAGE = _HTML_A + _HTML_B
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Web Agent 启动: http://0.0.0.0:8005")
-    uvicorn.run(app, host="0.0.0.0", port=8005)
+    port = int(os.getenv("PORT", "8005"))
+    logger.info(f"Web Agent 启动: http://0.0.0.0:{port}")
+    uvicorn.run(app, host="0.0.0.0", port=port)

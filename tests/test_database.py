@@ -7,6 +7,8 @@ import sys
 sys.path.insert(0, '..')
 
 import os
+import sqlite3
+import subprocess
 from datetime import datetime, timedelta
 from database import ReportDatabase
 from models import DailyReport
@@ -93,3 +95,28 @@ class TestReportDatabase:
         assert rows[0]["product_name"] == "蹦床"
         assert rows[0]["total_qty"] == 30  # 10 + 20 = 30
         assert rows[0]["days_sold"] == 2
+
+    def test_seed_demo_db_generates_valid_data(self, tmp_path):
+        """面试演示种子脚本：能生成 90 天日报 + 假会员库（不碰真实库）"""
+        pos_db = str(tmp_path / "demo.db")
+        rfm_db = str(tmp_path / "demo_rfm.db")
+        env = {**os.environ, "POS_DB_PATH": pos_db, "RFM_DB_PATH": rfm_db}
+        subprocess.run(
+            [sys.executable, "seed_demo_db.py"],
+            cwd=os.path.join(os.path.dirname(__file__), ".."),
+            env=env, check=True, capture_output=True,
+        )
+        # POS 假库：90 天日报 + 900 条商品排名，店 id 是"总店"
+        conn = sqlite3.connect(pos_db)
+        days = conn.execute("SELECT COUNT(*) FROM daily_reports").fetchone()[0]
+        ranks = conn.execute("SELECT COUNT(*) FROM product_rankings").fetchone()[0]
+        store = conn.execute("SELECT DISTINCT store_id FROM daily_reports").fetchone()[0]
+        conn.close()
+        assert days == 90
+        assert ranks == 900  # 90 天 × 每天 10 个商品
+        assert store == "总店"
+        # RFM 假库：至少 3000 条交易
+        conn = sqlite3.connect(rfm_db)
+        tx = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+        conn.close()
+        assert tx >= 3000

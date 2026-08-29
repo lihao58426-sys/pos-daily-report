@@ -11,9 +11,11 @@ Agent 工具集 — 把数据库查询函数包装成 LLM 可调用的 Tool
 Agent 循环逻辑见 agent.py（下一个 commit）。
 """
 
+import os
+
 from database import ReportDatabase
 
-DB_PATH = "data/daily_report.db"
+DB_PATH = os.getenv("POS_DB_PATH", "data/daily_report.db")
 
 
 # ── 工具执行函数 ──

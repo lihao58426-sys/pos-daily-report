@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta
 from langchain_core.tools import tool
 
 # RFM 数据库路径——跟 POS 同级的 rfm_report 目录
-RFM_DB = os.path.join(os.path.dirname(__file__), "..", "rfm_report", "data", "rfm_data.db")
+RFM_DB = os.getenv("RFM_DB_PATH", os.path.join(os.path.dirname(__file__), "..", "rfm_report", "data", "rfm_data.db"))
 
 # 内存缓存——同一截止日期 5 分钟内不重复计算
 _cache_result = None
