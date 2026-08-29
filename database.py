@@ -233,6 +233,43 @@ class ReportDatabase:
             )
         return [dict(row) for row in cursor.fetchall()]
 
+    # ==================== 查询：任意日期范围 ====================
+    def get_revenue_range(self, start_date: str, end_date: str, store_id: str | None = None) -> list[dict]:
+        """查任意日期区间的营收明细（按日期升序）
+
+        Args:
+            start_date: 开始日期 YYYY-MM-DD
+            end_date: 结束日期 YYYY-MM-DD（含）
+            store_id: 门店ID，None=查所有店
+        """
+        if store_id:
+            cursor = self._execute(
+                f"SELECT store_id, date, revenue, card_recharge, time_card_sales, "
+                f"gift_pack_sales, member_upgrade "
+                f"FROM daily_reports WHERE store_id = {self._ph()} AND date >= {self._ph()} AND date <= {self._ph()} "
+                f"ORDER BY date ASC",
+                (store_id, start_date, end_date),
+            )
+        else:
+            cursor = self._execute(
+                f"SELECT store_id, date, revenue, card_recharge, time_card_sales, "
+                f"gift_pack_sales, member_upgrade "
+                f"FROM daily_reports WHERE date >= {self._ph()} AND date <= {self._ph()} ORDER BY date ASC",
+                (start_date, end_date),
+            )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_date_span(self, store_id: str | None = None) -> tuple[str | None, str | None]:
+        """数据实际覆盖的日期范围 (MIN(date), MAX(date))"""
+        if store_id:
+            row = self._execute(
+                f"SELECT MIN(date) lo, MAX(date) hi FROM daily_reports WHERE store_id = {self._ph()}",
+                (store_id,),
+            ).fetchone()
+        else:
+            row = self._execute("SELECT MIN(date) lo, MAX(date) hi FROM daily_reports").fetchone()
+        return (row["lo"], row["hi"]) if row else (None, None)
+
     # ==================== 查询：趋势 ====================
     def get_trend(self, days: int = 30) -> list[dict]:
         """查最近 N 天的营收趋势（给图表用）

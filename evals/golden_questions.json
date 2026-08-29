@@ -1,0 +1,115 @@
+[
+  {
+    "id": "greeting",
+    "question": "你好呀",
+    "max_tool_calls": 0,
+    "must_not_call_tool": [],
+    "must_contain": [],
+    "must_not_contain": []
+  },
+  {
+    "id": "revenue_this_week",
+    "question": "这周生意怎么样？",
+    "must_call_tool": ["query_history", "query_revenue_range"],
+    "tool_params_any": [{"days": 7}],
+    "must_contain": ["元"],
+    "must_not_contain": []
+  },
+  {
+    "id": "revenue_may_2026",
+    "question": "2026年5月的收入是多少？",
+    "must_call_tool": ["query_revenue_range"],
+    "tool_params_any": [{"start_date": "2026-05-01"}],
+    "must_contain": ["2026-05"],
+    "must_not_contain": ["只能查最近一个月", "没有2026年5月", "最近30天"]
+  },
+  {
+    "id": "revenue_june",
+    "question": "6月的营收是多少？",
+    "must_call_tool": ["query_revenue_range", "query_history"],
+    "tool_params_any": [],
+    "must_contain": ["元"],
+    "must_not_contain": ["只能查"]
+  },
+  {
+    "id": "comparison_month_over_month",
+    "question": "这个月跟上个月比生意怎么样？",
+    "must_call_tool": ["query_comparison"],
+    "tool_params_any": [],
+    "must_contain": ["环比"],
+    "must_not_contain": []
+  },
+  {
+    "id": "prod_ranking_30d",
+    "question": "近一个月哪一项卖的最好？",
+    "must_call_tool": ["query_product_ranking"],
+    "tool_params_any": [{"days": 30}],
+    "must_contain": ["蹦床"],
+    "must_not_contain": ["6 次"]
+  },
+  {
+    "id": "prod_ranking_qty_30d",
+    "question": "蹦床组合乐园最近30天卖了多少次？",
+    "must_call_tool": ["query_product_ranking"],
+    "tool_params_any": [{"days": 30}],
+    "must_contain": [],
+    "must_not_contain": []
+  },
+  {
+    "id": "trend_30d",
+    "question": "最近30天的营收趋势怎么样？",
+    "must_call_tool": ["query_trend", "query_history", "query_revenue_range"],
+    "tool_params_any": [],
+    "must_contain": ["元"],
+    "must_not_contain": []
+  },
+  {
+    "id": "summary_total",
+    "question": "从开始到现在总共赚了多少？",
+    "must_call_tool": ["query_summary"],
+    "tool_params_any": [],
+    "must_contain": ["累计"],
+    "must_not_contain": []
+  },
+  {
+    "id": "new_members_this_month",
+    "question": "这个月新增了多少会员？",
+    "must_call_tool": ["query_new_members"],
+    "tool_params_any": [],
+    "must_contain": ["新增"],
+    "must_not_contain": []
+  },
+  {
+    "id": "new_member_trend_year",
+    "question": "今年会员新增趋势是什么？",
+    "must_call_tool": ["query_new_member_trend"],
+    "tool_params_any": [],
+    "must_contain": ["新增"],
+    "max_tool_calls": 3,
+    "must_not_contain": ["只有一个月"]
+  },
+  {
+    "id": "churn_segments",
+    "question": "哪些客户是流失客户？大概多少人？",
+    "must_call_tool": ["query_segments", "query_member_detail"],
+    "tool_params_any": [],
+    "must_contain": ["流失"],
+    "must_not_contain": []
+  },
+  {
+    "id": "churn_detail",
+    "question": "流失客户有哪些？举几个例子",
+    "must_call_tool": ["query_member_detail"],
+    "tool_params_any": [],
+    "must_contain": ["流失"],
+    "must_not_contain": []
+  },
+  {
+    "id": "member_trend_6m",
+    "question": "最近几个月会员消费趋势怎么样？",
+    "must_call_tool": ["query_member_trend"],
+    "tool_params_any": [],
+    "must_contain": ["到店"],
+    "must_not_contain": []
+  }
+]

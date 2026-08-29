@@ -4,7 +4,7 @@
 面试演示版专用：真实业务数据含客户隐私（5303 个真实会员手机号），
 绝不能用真实数据做演示。本脚本生成两份独立的假 SQLite（不碰真实库）：
 
-  - data/demo.db                   → daily_reports + product_rankings（90 天营收 + 商品排名）
+  - data/demo.db                   → daily_reports + product_rankings（150 天营收 + 商品排名）
   - ../rfm_report/data/demo_rfm.db → transactions（1500 个假会员 + 180 天消费记录）
 
 关键设计：所有日期都相对"今天"往前推——任何时候跑都是"最新数据"，永不过期。
@@ -33,7 +33,7 @@ POS_DB_PATH = os.getenv("POS_DB_PATH", "data/demo.db")
 RFM_DB_PATH = os.getenv("RFM_DB_PATH", os.path.join("..", "rfm_report", "data", "demo_rfm.db"))
 
 STORE_ID = "总店"
-POS_DAYS = 90          # 营收历史 90 天
+POS_DAYS = 150         # 营收历史 150 天（覆盖约 5 个自然月，保证"某月营收"类问题能查到完整月份）
 
 # 商品名（沿用真实业务名，演示讲着自然）+ 日销量区间
 PRODUCTS = [
@@ -93,7 +93,7 @@ def _days_in_month(d: date) -> int:
 
 
 def gen_pos() -> None:
-    """生成 POS 假库：90 天日报 + 每天 10 个商品排名"""
+    """生成 POS 假库：150 天日报 + 每天 10 个商品排名"""
     print(f"[1/2] 生成 POS 假数据 → {POS_DB_PATH}")
     os.makedirs(os.path.dirname(POS_DB_PATH) or ".", exist_ok=True)
     conn = sqlite3.connect(POS_DB_PATH)

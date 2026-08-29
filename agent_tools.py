@@ -12,6 +12,7 @@ Agent 循环逻辑见 agent.py（下一个 commit）。
 """
 
 import os
+from datetime import datetime
 
 from database import ReportDatabase
 
@@ -79,12 +80,42 @@ def _run_product_ranking(store_id: str = "总店", days: int = 1) -> str:
     return "\n".join(lines)
 
 
+def _run_revenue_range(start_date: str, end_date: str, store_id: str = "总店") -> str:
+    """查任意日期范围的营收汇总（按日明细 + 合计 + 日均）"""
+    try:
+        start = datetime.strptime(start_date.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
+        end = datetime.strptime(end_date.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        return "日期格式错误: 请使用 YYYY-MM-DD，例如 start_date=2026-05-01, end_date=2026-05-31"
+    if start > end:
+        start, end = end, start
+
+    with ReportDatabase(DB_PATH) as db:
+        rows = db.get_revenue_range(start, end, store_id)
+        lo, hi = db.get_date_span(store_id)
+    if not rows:
+        hint = f"（数据覆盖 {lo} ~ {hi}）" if lo else ""
+        return f"{store_id} 在 {start} ~ {end} 范围内没有数据{hint}。"
+    total = sum(r["revenue"] for r in rows)
+    card = sum(r["card_recharge"] for r in rows)
+    lines = [
+        f"{store_id} {start} ~ {end} 共 {len(rows)} 天：营收合计 {total:.0f} 元（日均 {total / len(rows):.0f}），储值卡 {card:.0f} 元"
+    ]
+    for r in rows[:35]:
+        lines.append(f"  {r['date']} | {r['revenue']:.0f} 元")
+    if len(rows) > 35:
+        lines.append(f"  ...共 {len(rows)} 天，明细已省略")
+    if lo and start < lo:
+        lines.append(f"提示：数据从 {lo} 开始，{start} 之前的日期没有数据。")
+    return "\n".join(lines)
+
+
 # ── Tool 注册表（Agent 的大脑读这个清单，决定调哪个）──
 
 TOOLS = [
     {
         "name": "query_history",
-        "description": "查指定门店最近N天的营收数据。返回每天日期、营业额、储值卡消费、次卡消费。用于回答'最近生意怎么样''这周卖了多少'这类问题。",
+        "description": "查指定门店最近N天的营收数据。返回每天日期、营业额、储值卡消费、次卡消费。用于回答'最近生意怎么样''这周卖了多少'这类问题。数据库保留最近150天，days 最大150。",
         "parameters": {
             "store_id": "门店ID，可选值：总店。不传默认 总店。",
             "days": "查最近几天，默认7天。老板问'这周'=7，'这个月'=30。",
@@ -92,7 +123,7 @@ TOOLS = [
     },
     {
         "name": "query_trend",
-        "description": "查营收趋势。返回最近N天每天的营业额，按日期升序排列。用于回答'最近在涨还是跌''有没有什么变化趋势'。",
+        "description": "查营收趋势。返回最近N天每天的营业额，按日期升序排列。用于回答'最近在涨还是跌''有没有什么变化趋势'。数据库保留最近150天，days 最大150。",
         "parameters": {
             "days": "查几天趋势，默认30。",
         },
@@ -109,10 +140,19 @@ TOOLS = [
     },
     {
         "name": "query_product_ranking",
-        "description": "查商品销量排名。days=1（默认）查最近一天；days=7/30 时按最近 N 天聚合，返回各商品累计销量排名。用于回答'哪个卖得最好''这个月什么最好卖''最近一周卖得最好的商品'。",
+        "description": "查商品销量排名。days=1（默认）查最近一天；days=7/30 时按最近 N 天聚合，返回各商品累计销量排名。数据库保留最近150天，days 最大150。用于回答'哪个卖得最好''这个月什么最好卖''最近一周卖得最好的商品'。",
         "parameters": {
             "store_id": "门店ID，默认 总店。",
             "days": "查最近几天：默认1（单日排名）。老板问'这个月'=30，'最近一周'=7，'昨天'=1。",
+        },
+    },
+    {
+        "name": "query_revenue_range",
+        "description": "查任意日期范围的营收汇总，返回该区间每天营收、合计、日均、储值卡。start_date/end_date 必须用 YYYY-MM-DD 格式。用于回答'2026年5月的收入是多少''6月赚了多少''从6月1日到6月30日的营收'这类问题。注意：具体能查到哪些日期，取决于数据库实际覆盖范围，若超出会提示。",
+        "parameters": {
+            "start_date": "开始日期，格式 YYYY-MM-DD，例如 2026-05-01。必填。",
+            "end_date": "结束日期，格式 YYYY-MM-DD，例如 2026-05-31。必填。",
+            "store_id": "门店ID，默认 总店。",
         },
     },
 ]
@@ -124,6 +164,7 @@ _EXECUTORS = {
     "query_comparison": _run_comparison,
     "query_summary": _run_summary,
     "query_product_ranking": _run_product_ranking,
+    "query_revenue_range": _run_revenue_range,
 }
 
 

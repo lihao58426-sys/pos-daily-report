@@ -68,20 +68,21 @@ async def chat(req: ChatRequest):
     history = _get_history(sid)
 
     try:
-        answer = run_agent(question, history)
+        answer, trace = run_agent(question, history, return_trace=True)
     except Exception as e:
         logger.error(f"Agent 处理失败: {e}")
         answer = "抱歉，暂时无法处理您的问题，请稍后再试。"
+        trace = []
 
     _remember(sid, "user", question)
     _remember(sid, "assistant", answer)
     logger.info(f"[{sid[:8]}] Q: {question[:40]} | A: {answer[:60]}")
-    return JSONResponse({"answer": answer, "session_id": sid})
+    return JSONResponse({"answer": answer, "session_id": sid, "trace": trace})
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "tools": 9}
+    return {"status": "ok", "tools": 11}
 
 
 # 聊天页面 HTML（拆成两段拼接，避免单次编辑过大）

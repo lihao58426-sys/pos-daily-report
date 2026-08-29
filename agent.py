@@ -58,16 +58,18 @@ def execute_any_tool(name: str, params: dict) -> str:
     return execute_tool(name, params)
 
 
-def run_agent(user_question: str, conversation_history: list[dict] | None = None) -> str:
+def run_agent(user_question: str, conversation_history: list[dict] | None = None, return_trace: bool = False):
     """
     接收用户问题 → 跟 LLM 对话 → 调工具 → 返回最终回答。
 
     Args:
         user_question: 用户发的问题
         conversation_history: 之前的对话上下文（可选，多轮记忆）
+        return_trace: True 时返回 (answer, trace)，trace 记录每轮工具调用（可观测性/eval 用）
 
     Returns:
-        Agent 的最终文字回答
+        return_trace=False（默认）: Agent 的最终文字回答
+        return_trace=True: (回答, trace列表) —— trace 元素 {"name", "params", "result"}
     """
     messages = (conversation_history or []) + [
         {"role": "user", "content": user_question},
@@ -76,18 +78,26 @@ def run_agent(user_question: str, conversation_history: list[dict] | None = None
     import logging
     logger = logging.getLogger(__name__)
 
+    trace: list[dict] = []
+    raw_reply = ""
     for _ in range(MAX_TURNS):
         raw_reply, tool_call = call_llm(messages, ALL_TOOLS)
         if tool_call is None:
-            return raw_reply
+            return (raw_reply, trace) if return_trace else raw_reply
 
         tool_result = execute_any_tool(tool_call["name"], tool_call.get("params", {}))
+        # 记录轨迹（结果截断，防止响应过大）
+        trace.append({
+            "name": tool_call["name"],
+            "params": tool_call.get("params", {}),
+            "result": (tool_result or "")[:400],
+        })
         messages.append({"role": "assistant", "content": raw_reply})
         messages.append({"role": "user", "content": f"工具 {tool_call['name']} 返回结果：\n{tool_result}\n\n请根据这些数据回答用户最初的问题。"})
 
     # 超出最大轮数——可能 LLM 在反复调工具但没找到答案
     logger.warning(f"Agent 达到最大轮数 {MAX_TURNS}，强制结束。问题: {user_question[:50]}")
-    return raw_reply
+    return (raw_reply, trace) if return_trace else raw_reply
 
 
 # ── 终端测试入口 ──

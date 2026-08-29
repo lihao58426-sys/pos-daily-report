@@ -45,6 +45,25 @@ class TestReportDatabase:
         assert "date" in trend[0]
         assert "revenue" in trend[0]
 
+    def test_get_revenue_range(self):
+        """任意日期范围查询：只返回区间内的数据，含首尾日期"""
+        report = DailyReport(revenue=10000)
+        d1 = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
+        d2 = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
+        self.db.insert(report, date=d1, store_id="test")
+        self.db.insert(report, date=d2, store_id="test")
+        rows = self.db.get_revenue_range(d1, d2, store_id="test")
+        dates = [r["date"] for r in rows]
+        assert d1 in dates and d2 in dates
+        assert sum(r["revenue"] for r in rows) == 20000
+        # 范围外的日期不应出现
+        outside = self.db.get_revenue_range(d2, d2, store_id="test")
+        assert len(outside) == 1 and outside[0]["date"] == d2
+        # 数据覆盖范围
+        lo, hi = self.db.get_date_span(store_id="test")
+        assert lo is not None and hi is not None
+        assert lo <= d1 <= d2 <= hi
+
     def test_get_summary(self):
         """汇总统计"""
         summary = self.db.get_summary()
@@ -106,14 +125,14 @@ class TestReportDatabase:
             cwd=os.path.join(os.path.dirname(__file__), ".."),
             env=env, check=True, capture_output=True,
         )
-        # POS 假库：90 天日报 + 900 条商品排名，店 id 是"总店"
+        # POS 假库：150 天日报 + 1500 条商品排名，店 id 是"总店"
         conn = sqlite3.connect(pos_db)
         days = conn.execute("SELECT COUNT(*) FROM daily_reports").fetchone()[0]
         ranks = conn.execute("SELECT COUNT(*) FROM product_rankings").fetchone()[0]
         store = conn.execute("SELECT DISTINCT store_id FROM daily_reports").fetchone()[0]
         conn.close()
-        assert days == 90
-        assert ranks == 900  # 90 天 × 每天 10 个商品
+        assert days == 150
+        assert ranks == 1500  # 150 天 × 每天 10 个商品
         assert store == "总店"
         # RFM 假库：至少 3000 条交易
         conn = sqlite3.connect(rfm_db)

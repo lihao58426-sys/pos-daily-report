@@ -12,18 +12,50 @@ Agent LLM 调用 — 把消息和工具清单发给 DeepSeek，让它决定下�
 
 import json
 import os
+import sqlite3
 import requests
+from datetime import date
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 LLM_URL = "https://api.deepseek.com/v1/chat/completions"
 
-SYSTEM_PROMPT = """你是一个门店经营数据分析助手。你可以调用工具查询数据库。
+# ── 时间与数据覆盖上下文：模型不知道今天几号，也不知道库里有几天数据，我们替它算好 ──
+_TODAY = date.today()
+_WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
+
+
+def _data_coverage_note() -> str:
+    """读真实数据库，返回数据覆盖范围描述（读不到就降级为通用提示）"""
+    try:
+        pos = sqlite3.connect(os.getenv("POS_DB_PATH", "data/daily_report.db"))
+        r = pos.execute("SELECT MIN(date), MAX(date) FROM daily_reports").fetchone()
+        pos.close()
+        rfm = sqlite3.connect(
+            os.getenv("RFM_DB_PATH", os.path.join(os.path.dirname(__file__), "..", "rfm_report", "data", "rfm_data.db"))
+        )
+        rr = rfm.execute("SELECT MIN(SUBSTR(trans_date,1,7)), MAX(SUBSTR(trans_date,1,7)) FROM transactions").fetchone()
+        rfm.close()
+        parts = []
+        if r and r[0]:
+            parts.append(f"POS 营收数据覆盖 {r[0]} ~ {r[1]}")
+        if rr and rr[0]:
+            parts.append(f"RFM 会员数据覆盖 {rr[0]} ~ {rr[1]}")
+        return "；".join(parts) + "。" if parts else "数据覆盖范围以工具实际返回为准。"
+    except Exception:
+        return "数据覆盖范围以工具实际返回为准。"
+
+
+SYSTEM_PROMPT = f"""你是一个门店经营数据分析助手。你可以调用工具查询数据库。
+
+今天是 {_TODAY.strftime('%Y-%m-%d')}（星期{_WEEKDAYS[_TODAY.weekday()]}）。
+{_data_coverage_note()}
+老板说"今年/本月/上周/5月/去年"这类时间时，请先用今天的日期换算成具体日期范围，再选合适的工具查询。
 
 规则：
 1. 如果用户的问题需要查数据，先调用对应的工具，根据工具返回的真实数据来回答。
 2. 如果用户只是在闲聊（问好、感谢），直接文字回复，不需要调工具。
 3. 回答用中文，简洁——说清楚数据是什么、意味着什么，不超过 5 句话。
-4. 如果工具返回"暂无数据"，如实告知，不要编造。"""
+4. 如果工具返回"暂无数据"或提示日期超出覆盖范围，如实告知数据范围，不要编造。"""
 
 
 def build_tool_prompt(tools: list[dict]) -> str:

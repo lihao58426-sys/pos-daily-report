@@ -175,7 +175,7 @@ def query_member_detail(segment: str = "", as_of: str = "", top_n: int = 20) -> 
 
 @tool
 def query_member_trend(months: int = 6) -> str:
-    """查最近 N 个月的会员月度消费趋势——每月到店人数、消费总额。
+    """查最近 N 个月的会员月度消费趋势——每月到店人数、消费总额。数据约 12 个月，months 最大 12。
     用于回答'最近几个月会员消费在涨还是跌'。"""
     try:
         conn = sqlite3.connect(RFM_DB)
@@ -202,6 +202,50 @@ def query_member_trend(months: int = 6) -> str:
         lines = [f"最近 {months} 个月会员消费趋势："]
         for r in rows:
             lines.append(f"  {r['month']} | {r['member_count']} 人到店 | 营收 ¥{r['total_revenue']:.0f}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"查询失败: {e}"
+
+
+@tool
+def query_new_member_trend(start_month: str = "", end_month: str = "") -> str:
+    """查一段时期内每个月的会员增长趋势——每月新增会员数（按该月首次消费的会员统计）。
+    start_month/end_month 格式 YYYY-MM，不传则覆盖全部数据月份。
+    用于回答'今年会员增长趋势''新客增长情况''每个月的会员增长'这类趋势问题。"""
+    try:
+        conn = sqlite3.connect(RFM_DB)
+        conn.row_factory = sqlite3.Row
+
+        # 先按会员算全时段首访日期，再按月统计 → 真正的"新增会员"
+        rows = conn.execute("""
+            SELECT SUBSTR(first_date, 1, 7) AS m, COUNT(*) AS n FROM (
+                SELECT COALESCE(NULLIF(phone,''), member_name) AS uid, MIN(trans_date) AS first_date
+                FROM transactions
+                WHERE phone != '佚名' AND phone != '' AND member_name != ''
+                  AND CAST(revenue AS REAL) > 0
+                GROUP BY uid
+            )
+            GROUP BY m ORDER BY m
+        """).fetchall()
+
+        range_row = conn.execute(
+            "SELECT MIN(SUBSTR(trans_date,1,7)) lo, MAX(SUBSTR(trans_date,1,7)) hi FROM transactions"
+        ).fetchone()
+        conn.close()
+        lo = str(range_row["lo"] or "")
+        hi = str(range_row["hi"] or "")
+
+        start = start_month.strip()
+        end = end_month.strip()
+        if start and end and start > end:
+            start, end = end, start
+        filtered = [r for r in rows if (not start or r["m"] >= start) and (not end or r["m"] <= end)]
+        if not filtered:
+            return f"该月份范围不在数据内（数据覆盖 {lo} ~ {hi}）。"
+
+        lines = [f"每月新增会员趋势（{filtered[0]['m']} ~ {filtered[-1]['m']}）："]
+        for r in filtered:
+            lines.append(f"  {r['m']} | 新增 {r['n']} 人")
         return "\n".join(lines)
     except Exception as e:
         return f"查询失败: {e}"
@@ -270,4 +314,4 @@ def query_new_members(month: str = "") -> str:
 
 # ── 工具注册 ──
 
-RFM_TOOLS = [query_segments, query_member_detail, query_member_trend, query_new_members]
+RFM_TOOLS = [query_segments, query_member_detail, query_member_trend, query_new_members, query_new_member_trend]
